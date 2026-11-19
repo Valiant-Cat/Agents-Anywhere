@@ -8,6 +8,7 @@ All Server HTTP, SSE, and WebSocket API documentation should live under this dir
 
 ## Documents
 
+- [桌面安装包下载](desktop-downloads.md)：独立于 `/api/v2` 的公开文件分发入口，不改变产品 API 或客户端版本检查协议。
 - [运行中排队消息](session-message-queue.md)：会话运行中继续发送、Server 排队与派发、打断并发送、队列管理接口。
 - [统一目标模式](goals.md)：Codex、Claude Code 的目标栏、操作回执、原生续跑和数据库恢复。
 

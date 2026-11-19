@@ -40,6 +40,8 @@ Open `http://127.0.0.1:5174`.
 
 ## Development Image
 
+桌面安装包分发可叠加 `docker/docker-compose.downloads.yml`，通过只读挂载目录提供 `/download/mac/latest` 和 `/download/windows/latest`；配置、发布及验证步骤见[桌面安装包下载](../docs/api/desktop-downloads.md)。
+
 `docker/Dockerfile.dev` starts the FastAPI backend and the Next.js dev server in
 one container.
 

@@ -30,6 +30,7 @@ from agent_server.api import (
     connector_terminal,
     connectors,
     dashboard_stream,
+    desktop_downloads,
     error_handlers,
     model_config,
     oauth,
@@ -460,6 +461,10 @@ def create_app(
     app.include_router(session_goals.router, prefix=API_V2_PREFIX)
     app.include_router(sessions_fs.router, prefix=API_V2_PREFIX)
     app.include_router(sessions_terminal.router, prefix=API_V2_PREFIX)
+
+    app.include_router(
+        desktop_downloads.create_download_router(os.environ.get("AGENT_SERVER_DOWNLOAD_DIR"))
+    )
 
     static_dir = os.environ.get("AGENT_SERVER_STATIC_DIR")
     if static_dir:
