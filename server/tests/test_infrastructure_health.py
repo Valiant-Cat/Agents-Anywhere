@@ -39,6 +39,30 @@ def test_liveness_and_readiness_are_separate(tmp_path) -> None:
     }
 
 
+def test_health_reads_project_version_independently_of_working_directory(
+    tmp_path, monkeypatch
+) -> None:
+    project_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    load = tomllib.load
+    loaded_paths = []
+
+    def load_project(file):
+        loaded_paths.append(Path(file.name))
+        project = load(file)
+        project["project"]["version"] = "9.8.7"
+        return project
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(tomllib, "load", load_project)
+    app = create_app()
+    client = TestClient(app)
+
+    assert project_path in loaded_paths
+    assert app.version == "9.8.7"
+    for route in ("/api/v2/health", "/api/v2/health/live"):
+        assert client.get(route).json()["version"] == "9.8.7"
+
+
 def test_readiness_fails_closed_when_redis_is_unavailable(tmp_path) -> None:
     client = TestClient(create_app())
 

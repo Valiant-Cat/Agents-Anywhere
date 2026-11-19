@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import time
+import tomllib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -239,7 +240,9 @@ def create_app(
                                 finally:
                                     await app.state.store.close()
 
-    app = FastAPI(title="Agent Server", version="2.2.0", lifespan=lifespan)
+    with (Path(__file__).resolve().parents[1] / "pyproject.toml").open("rb") as file:
+        server_version = tomllib.load(file)["project"]["version"]
+    app = FastAPI(title="Agent Server", version=server_version, lifespan=lifespan)
     app.add_exception_handler(
         ConnectorServiceError,
         error_handlers.connector_service_error_handler,
