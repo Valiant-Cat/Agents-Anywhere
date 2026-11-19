@@ -36,6 +36,14 @@
 
 - Agent 运行中输入框不再禁用：输入内容后点发送即排队，长按发送键可选「打断并发送」或「引导当前任务」，输入框为空时发送键仍是停止；输入框上方显示排队消息，可以立即发送、编辑、删除或重试。（[#659](https://github.com/anywhere-labs/Agents-Anywhere/pull/659)）
 
+## 2.2.2（2026-11-19）
+
+[自部署发布说明](docs/releases/2.2.2.md)
+
+### 升级须知
+
+- 自部署桌面下载改为跳转 GitHub Release，部署者需使用 `AGENT_SERVER_DOWNLOAD_RELEASE_REPO` 配置发布仓库，并上传固定名称的安装包，不再使用本地下载目录。
+
 ## 2.2.1（2026-11-19）
 
 [自部署发布说明](docs/releases/2.2.1.md)

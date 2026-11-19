@@ -121,7 +121,7 @@ curl http://127.0.0.1:8000/api/v2/health/ready
 | `AGENT_SERVER_CORS_ORIGINS` | Comma-separated explicit CORS origins. |
 | `AGENT_SERVER_CORS_ORIGIN_REGEX` | CORS origin regex. Defaults to local `localhost` / `127.0.0.1` ports. |
 | `AGENT_SERVER_STATIC_DIR` | Built frontend directory. When set, `/` serves `index.html` and `/assets` serves static assets. |
-| `AGENT_SERVER_DOWNLOAD_DIR` | 桌面安装包根目录，未设置时禁用下载；文件布局、发布步骤及接口见[桌面安装包下载](../docs/api/desktop-downloads.md)。 |
+| `AGENT_SERVER_DOWNLOAD_RELEASE_REPO` | GitHub Release 仓库，格式 `owner/repo`，未设置时禁用下载跳转；发布步骤见[桌面安装包下载](../docs/api/desktop-downloads.md)。 |
 
 PostgreSQL is the durable source of truth for Timeline items after a buffer flush.
 Before that flush, distributed deployments retain accepted Timeline upserts and

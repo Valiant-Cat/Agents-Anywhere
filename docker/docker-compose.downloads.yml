@@ -1,10 +1,5 @@
-# 与 docker-compose.postgres.yml 叠加使用，宿主机目录需预先创建。
+# 与 docker-compose.postgres.yml 叠加使用，安装包由 GitHub Release 分发。
 services:
   server-next:
     environment:
-      AGENT_SERVER_DOWNLOAD_DIR: /downloads
-    volumes:
-      - type: bind
-        source: ${AGENT_SERVER_DOWNLOAD_HOST_DIR:?请设置安装包宿主机目录}
-        target: /downloads
-        read_only: true
+      AGENT_SERVER_DOWNLOAD_RELEASE_REPO: ${AGENT_SERVER_DOWNLOAD_RELEASE_REPO:-Valiant-Cat/Agents-Anywhere}

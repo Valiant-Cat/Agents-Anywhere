@@ -36,14 +36,12 @@ services:
   server-next:
     image: $image
     environment:
-      AGENT_SERVER_DOWNLOAD_DIR: /downloads
-    volumes:
-      - $root/downloads:/downloads:ro
+      AGENT_SERVER_DOWNLOAD_RELEASE_REPO: \${AGENT_SERVER_DOWNLOAD_RELEASE_REPO:-Valiant-Cat/Agents-Anywhere}
 EOF
 compose=(docker compose -p agents-anywhere --env-file "$root/.env"
     -f "$repo/docker/docker-compose.postgres.yml"
     -f "$repo/docker/docker-compose.local.yml")
-mkdir -p "$root/backups" "$root/downloads/mac" "$root/downloads/windows"
+mkdir -p "$root/backups"
 backup="$root/backups/before-$release-$(date +%Y%m%d%H%M%S).sql.gz"
 docker exec agents-anywhere-postgres-next-1 pg_dump -U agents_anywhere agents_anywhere | gzip > "$backup"
 test -s "$backup"
@@ -72,9 +70,9 @@ for attempt in $(seq 1 60); do
 done
 [[ "$healthy" == true ]]
 curl --fail --silent --show-error --max-time 15 https://aa.xmfind.cn/api/v2/health/ready
-# 尚未上传的安装包应返回 404，不能误返回前端页面。
+# 只校验入口跳转，不跟随 GitHub，安装包可独立于 Server 发布。
 code=$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 15 https://aa.xmfind.cn/download/windows/latest)
-[[ "$code" == 200 || "$code" == 404 ]]
+[[ "$code" == 302 ]]
 mv "$root/deploy/image.yml.tmp" "$root/deploy/image.yml"
 printf '%s\n' "$release" > "$root/deploy/current-release"
 trap - ERR

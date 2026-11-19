@@ -37,11 +37,11 @@ git push origin v2.2.1
 
 ## 安装包
 
-下载目录固定为 `/opt/agents-anywhere/downloads`，只读挂载到容器 `/downloads`。发布代码不自动生成或上传桌面安装包。文件布局与原子替换步骤见[桌面安装包下载](api/desktop-downloads.md)。
+下载入口返回 302，跳转到 GitHub Release，服务器不存储或代理安装包。默认仓库为 `Valiant-Cat/Agents-Anywhere`，可在服务器 `.env` 设置 `AGENT_SERVER_DOWNLOAD_RELEASE_REPO=owner/repo` 后重新部署覆盖。发布代码不自动生成或上传桌面安装包，固定文件名和发布步骤见[桌面安装包下载](api/desktop-downloads.md)。旧下载目录可以保留，但不再使用或挂载。
 
 ## 手动运维
 
-部署后执行 Compose 命令应包含以下文件，避免切回旧镜像或丢失下载挂载：
+部署后执行 Compose 命令应包含以下文件，避免切回旧镜像或丢失下载配置：
 
 ```sh
 docker compose -p agents-anywhere \
