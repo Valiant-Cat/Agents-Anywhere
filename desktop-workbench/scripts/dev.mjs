@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readDesktopConfig } from "./desktop-config.mjs";
 import { spawn } from "node:child_process";
 import http from "node:http";
 import { createRequire } from "node:module";
@@ -11,7 +11,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const rendererPackage = "agents-anywhere-desktop-renderer";
 const explicitWebUrl = process.env.WORKBENCH_WEB_URL?.trim();
 const explicitWebPort = parsePort(process.env.WORKBENCH_WEB_PORT);
-const desktopConfig = JSON.parse(readFileSync(new URL("../config.json", import.meta.url), "utf8"));
+const desktopConfig = readDesktopConfig();
 const apiOrigin = process.env.WORKBENCH_API_ORIGIN?.trim() || process.env.AGENTS_ANYWHERE_API?.trim() || desktopConfig.cloud.serverUrl;
 const apiNamespace = process.env.WORKBENCH_API_NAMESPACE ?? process.env.AGENTS_ANYWHERE_API_NAMESPACE ?? desktopConfig.apiNamespace;
 const usesShell = process.platform === "win32";

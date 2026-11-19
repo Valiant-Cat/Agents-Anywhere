@@ -17,6 +17,8 @@
 
 ### Desktop
 
+- 新增 macOS 一键构建安装脚本，默认安装到 `/Applications` 并打开应用；构建失败保留旧版，安装失败可恢复旧版。
+- Desktop 支持通过本机 `.env` 配置 Cloud 登录和各平台更新下载地址，无需将私有部署地址写入源码；自部署未配置下载地址时不再下载官方安装包。
 - Desktop 安装包自带 Pi 运行环境，第一次启动只需在本地复制，不再下载 Node 和 npm 依赖；准备失败时也不再停在启动页、点「重试」也进不去，Pi 会在第一次使用时再次准备并在会话里提示错误。（[#657](https://github.com/anywhere-labs/Agents-Anywhere/pull/657)）
 
 ### 本机连接

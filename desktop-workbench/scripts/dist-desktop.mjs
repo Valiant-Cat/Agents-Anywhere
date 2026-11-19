@@ -136,7 +136,7 @@ function verifyMac({ signed, notarized, artifact }) {
     .find((candidate) => existsSync(candidate));
   if (!app) fail("The packaged application was not found under release/, so it could not be verified.");
   const guard = join(app, "Contents", "Resources", "connector-guard");
-  run("lipo", ["-verify_arch", "arm64", "x86_64", guard], process.env);
+  run("lipo", [guard, "-verify_arch", "arm64", "x86_64"], process.env);
   if (!signed) {
     log("Artifact is unsigned; Gatekeeper will ask the user to confirm the first launch.");
     return;

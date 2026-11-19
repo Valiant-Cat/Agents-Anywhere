@@ -15,6 +15,7 @@ __pycache__/
 web-next/out/
 .env.local
 .env.*.local
+desktop-workbench/.env
 
 # Dependency lockfiles are intentionally not committed in this repo.
 # Cross-platform package managers rewrite them frequently, creating noise.
@@ -26,6 +27,7 @@ pnpm-lock.yaml
 # Local Claude tooling (launch.json, transcripts, worktree metadata)
 .claude/
 .codex-run/
+.learnings/
 .worktrees/
 # Local editor/agent project marker (per-machine UUID)
 .freebuff/

@@ -76,10 +76,39 @@ yarn dev
 ```
 
 `yarn dev` starts the bundled `renderer` Next app on the first available local port from `5184`, waits for it, then opens Electron.
-By default, the embedded web app talks to `https://web.agents-anywhere.com`.
+桌面端默认连接官方服务；可通过本机 `.env` 覆盖，私有部署地址不必写入源码。
 The desktop shell uses the `/api/v2` API namespace by default.
 
+## macOS 构建并安装
+
+在仓库根目录执行，默认构建当前 Mac 架构，成功后安装到 `/Applications/Agents Anywhere.app` 并打开：
+
+```bash
+bash desktop-workbench/scripts/build-install-mac.sh
+```
+
+脚本需要 Node 22 和 Corepack；当前 Node 不符合要求时会尝试通过本机 NVM 切换。
+构建失败不覆盖旧应用，安装前会等待旧应用正常退出，安装失败会尝试恢复旧应用。
+安装目录必须对当前用户可写，脚本不会自动提权或删除用户数据。
+未配置签名凭据时，安装包仍未签名、未公证。
+
+可用参数：`--skip-build` 复用已有编译结果和运行时并重新打包，`--no-open` 安装后不打开，
+`--install-dir /绝对路径` 指定其他已有安装目录。
+
 ## Login and server configuration
+
+在 `desktop-workbench/.env` 中设置 `CLOUD_SERVER_URL` 和
+`CLOUD_OAUTH_WEB_ORIGIN`，即可替换 Cloud 按钮的默认 API 和网页登录地址，
+变量示例见 `.env.example`。开发和构建自动加载该文件，已有进程环境变量优先；
+仅设置服务地址时，网页登录地址默认跟随。修改后需完整构建，不要使用 `--skip-build`。
+本地文件已被 Git 忽略，构建仅写入 `dist/config.json`，不会改写源码配置。
+地址仍会包含在安装包中，不应当将此机制用于存储秘密。
+
+更新安装包通过 `.env` 中的 `DESKTOP_UPDATE_MAC_URL` 和
+`DESKTOP_UPDATE_WINDOWS_URL` 分别配置，必须填写实际安装包的 HTTPS 下载地址。
+留空禁用对应平台的下载；自部署时未配置的地址也会清空，不会回退到官方安装包。
+此配置不影响版本检查，下载服务需自行部署，修改后需重新构建安装。
+没有覆盖 Cloud 地址及下载地址时，保留源码中的官方更新默认值。
 
 The login page offers **Agents Anywhere Cloud** and an expandable self-hosted
 server form. Both check `GET /api/v2/health` and require `status: "ok"` before
