@@ -42,7 +42,7 @@ gh release upload v2.2.2 "/path/to/Agents-Anywhere-latest.dmg" \
   --repo Valiant-Cat/Agents-Anywhere
 ```
 
-仅推送 Git 标签和部署 Server 不会创建 Release 或构建安装包。每个作为 Latest 的正式 Release 都必须附带上述安装包，避免仅发布 Server 后下载中断。客户端需要能访问 GitHub；匿名下载不支持私有仓库。
+配置好[桌面流水线变量](../self-hosted-deployment.md#桌面流水线配置)后，推送包含新工作流的正式版本标签会自动构建两个平台、上传安装包并发布 Release，随后才部署 Server；旧标签通过手动运行「自部署桌面发布」补包。构建失败不会发布正式 Release 或触发本次自动部署。每个作为 Latest 的正式 Release 都必须附带上述安装包，避免仅发布 Server 后下载中断。客户端需要能访问 GitHub；匿名下载不支持私有仓库。
 
 Desktop 原来的 `.env` 下载入口无需更改：
 

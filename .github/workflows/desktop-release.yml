@@ -1,0 +1,229 @@
+name: 自部署桌面发布
+
+on:
+  push:
+    tags: ['v*']
+    branches: [self-hosted]
+    paths:
+      - .github/workflows/desktop-release.yml
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 要构建的现有正式版本标签，例如 v2.2.2
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      commit: ${{ steps.version.outputs.commit }}
+    steps:
+      - name: 检出发布源码
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.release_tag || github.ref_name }}
+          fetch-depth: 0
+      - name: 校验标签、版本及分支
+        id: version
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || '' }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if [[ -z "$RELEASE_TAG" ]]; then
+            RELEASE_TAG=$(python3 -c 'import tomllib; print("v" + tomllib.load(open("server/pyproject.toml", "rb"))["project"]["version"])')
+          fi
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          export RELEASE_TAG
+          git checkout --detach "refs/tags/$RELEASE_TAG"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          git fetch origin self-hosted
+          git merge-base --is-ancestor HEAD origin/self-hosted
+          python3 - <<'PY'
+          import os
+          import tomllib
+          with open("server/pyproject.toml", "rb") as file:
+              version = tomllib.load(file)["project"]["version"]
+          if os.environ["RELEASE_TAG"] != f"v{version}":
+              raise SystemExit("标签与 Server 版本不一致")
+          PY
+          # 不覆盖已发布附件，允许失败后的草稿重试。
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft > release.json; then
+            python3 -c 'import json; assert json.load(open("release.json"))["isDraft"], "正式 Release 已存在，不允许覆盖"'
+          fi
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: mac
+            arch: universal
+            extension: dmg
+            asset: Agents-Anywhere-latest.dmg
+          - os: windows-latest
+            platform: win
+            arch: x64
+            extension: exe
+            asset: Agents-Anywhere-Setup-latest.exe
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      CLOUD_SERVER_URL: ${{ vars.CLOUD_SERVER_URL }}
+      CLOUD_OAUTH_WEB_ORIGIN: ${{ vars.CLOUD_OAUTH_WEB_ORIGIN }}
+      DESKTOP_UPDATE_MAC_URL: ${{ vars.DESKTOP_UPDATE_MAC_URL }}
+      DESKTOP_UPDATE_WINDOWS_URL: ${{ vars.DESKTOP_UPDATE_WINDOWS_URL }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop-workbench
+    steps:
+      - name: 检出固定提交
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+      - name: 安装桌面依赖
+        uses: ./.github/actions/setup-yarn
+        with:
+          project: desktop-workbench
+          node-version: '22'
+      - name: 注入自部署配置及安装包版本
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          node --input-type=module <<'JS'
+          import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+          const server = new URL(process.env.CLOUD_SERVER_URL);
+          if (server.protocol !== "https:" || server.username || server.password ||
+              server.pathname !== "/" || server.search || server.hash) {
+            throw new Error("必须设置有效的 HTTPS CLOUD_SERVER_URL 仓库变量");
+          }
+          const values = {
+            CLOUD_OAUTH_WEB_ORIGIN: process.env.CLOUD_OAUTH_WEB_ORIGIN || server.origin,
+            DESKTOP_UPDATE_MAC_URL: process.env.DESKTOP_UPDATE_MAC_URL || `${server.origin}/download/mac/latest?from=update`,
+            DESKTOP_UPDATE_WINDOWS_URL: process.env.DESKTOP_UPDATE_WINDOWS_URL || `${server.origin}/download/windows/latest?from=update`,
+          };
+          for (const [name, value] of Object.entries(values)) {
+            if (/[\r\n]/.test(value)) throw new Error(`无效配置：${name}`);
+            appendFileSync(process.env.GITHUB_ENV, `${name}=${value}\n`);
+          }
+          const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+          pkg.version = process.env.RELEASE_VERSION;
+          writeFileSync("package.json", `${JSON.stringify(pkg, null, 2)}\n`);
+          JS
+      - name: 桌面无界面检查
+        run: |
+          corepack yarn test:main
+          corepack yarn renderer:typecheck
+      - name: 构建安装包
+        env:
+          MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WIN_CERT_P12_BASE64: ${{ secrets.WIN_CERT_P12_BASE64 }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: corepack yarn dist:${{ matrix.platform }} --${{ matrix.arch }}
+      - name: 核验包内配置并整理附件
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_EXTENSION: ${{ matrix.extension }}
+          RELEASE_ASSET: ${{ matrix.asset }}
+          RELEASE_PLATFORM: ${{ matrix.platform }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import { createRequire } from "node:module";
+          import { copyFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+          import { createHash } from "node:crypto";
+          const require = createRequire(import.meta.url);
+          const asar = require("@electron/asar");
+          const root = process.env.RELEASE_PLATFORM === "mac"
+            ? "release/mac-universal/Agents Anywhere.app/Contents/Resources"
+            : "release/win-unpacked/resources";
+          const read = (file) => JSON.parse(asar.extractFile(`${root}/app.asar`, file).toString());
+          const config = read("dist/config.json");
+          assert.equal(config.cloud.serverUrl, new URL(process.env.CLOUD_SERVER_URL).origin);
+          assert.equal(config.cloud.oauthWebOrigin, new URL(process.env.CLOUD_OAUTH_WEB_ORIGIN).origin);
+          assert.equal(config.updates.downloadUrls.darwin, process.env.DESKTOP_UPDATE_MAC_URL);
+          assert.equal(config.updates.downloadUrls.win32, process.env.DESKTOP_UPDATE_WINDOWS_URL);
+          assert.equal(read("dist/build-info.json").serverVersion, process.env.RELEASE_VERSION);
+          assert.equal(read("package.json").version, process.env.RELEASE_VERSION);
+          const files = readdirSync("release").filter((name) => name.endsWith(`.${process.env.RELEASE_EXTENSION}`));
+          assert.equal(files.length, 1, "只能存在一个目标安装包");
+          mkdirSync("release-assets", { recursive: true });
+          const name = process.env.RELEASE_ASSET;
+          copyFileSync(`release/${files[0]}`, `release-assets/${name}`);
+          const hash = createHash("sha256").update(readFileSync(`release-assets/${name}`)).digest("hex");
+          writeFileSync(`release-assets/${name}.sha256`, `${hash}  ${name}\n`);
+          JS
+      - name: 保存安装包及校验文件
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform }}
+          path: desktop-workbench/release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 下载两个平台安装包
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: assets
+      - name: 校验并发布正式 Release
+        working-directory: assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
+          MAC_SIGNED: ${{ secrets.MAC_CERT_P12_BASE64 != '' }}
+          MAC_NOTARIZED: ${{ secrets.APPLE_ID != '' }}
+          WIN_SIGNED: ${{ secrets.WIN_CERT_P12_BASE64 != '' }}
+        run: |
+          test -s Agents-Anywhere-latest.dmg
+          test -s Agents-Anywhere-Setup-latest.exe
+          sha256sum -c ./*.sha256
+          printf 'macOS：通用包（Apple Silicon / Intel）；Windows：x64。\n\n签名凭据已配置：macOS=%s，Apple 公证=%s，Windows=%s。\n未配置签名或公证的平台可能被系统拦截，不代表已经通过真实安装验证。\n\n源码提交：%s\n' \
+            "$MAC_SIGNED" "$MAC_NOTARIZED" "$WIN_SIGNED" "$RELEASE_COMMIT" > notes.md
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft > release.json; then
+            python3 -c 'import json; assert json.load(open("release.json"))["isDraft"], "不覆盖正式 Release"'
+          else
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
+              --title "$RELEASE_TAG" --notes-file notes.md
+          fi
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            Agents-Anywhere-latest.dmg Agents-Anywhere-latest.dmg.sha256 \
+            Agents-Anywhere-Setup-latest.exe Agents-Anywhere-Setup-latest.exe.sha256
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest --notes-file notes.md
+
+  deploy:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [validate, publish]
+    uses: ./.github/workflows/deploy-self-hosted.yml
+    with:
+      release_tag: ${{ needs.validate.outputs.tag }}
+    secrets: inherit
