@@ -6,6 +6,8 @@ on:
     branches: [self-hosted]
     paths:
       - .github/workflows/desktop-release.yml
+      - desktop-workbench/package.json
+      - desktop-workbench/scripts/mac-universal.test.mjs
   workflow_dispatch:
     inputs:
       release_tag:
@@ -27,6 +29,8 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       commit: ${{ steps.version.outputs.commit }}
+      repair: ${{ steps.version.outputs.repair }}
+      matrix: ${{ steps.version.outputs.matrix }}
     steps:
       - name: 检出发布源码
         uses: actions/checkout@v6
@@ -57,9 +61,25 @@ jobs:
           if os.environ["RELEASE_TAG"] != f"v{version}":
               raise SystemExit("标签与 Server 版本不一致")
           PY
-          # 不覆盖已发布附件，允许失败后的草稿重试。
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft > release.json; then
-            python3 -c 'import json; assert json.load(open("release.json"))["isDraft"], "正式 Release 已存在，不允许覆盖"'
+          REPAIR=false
+          # 仅分支补包允许向已有正式版本追加缺失的 Mac 包，不替换附件。
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,assets > release.json; then
+            if python3 -c 'import json; assert not json.load(open("release.json"))["isDraft"]'; then
+              test "$GITHUB_REF" = refs/heads/self-hosted
+              python3 - <<'PY'
+          import json
+          names = {asset["name"] for asset in json.load(open("release.json"))["assets"]}
+          assert {"Agents-Anywhere-Setup-latest.exe", "Agents-Anywhere-Setup-latest.exe.sha256"} <= names
+          assert not {"Agents-Anywhere-latest.dmg", "Agents-Anywhere-latest.dmg.sha256"} & names
+          PY
+              REPAIR=true
+            fi
+          fi
+          echo "repair=$REPAIR" >> "$GITHUB_OUTPUT"
+          if [[ "$REPAIR" = true ]]; then
+            echo 'matrix={"include":[{"os":"macos-15","platform":"mac","arch":"universal","extension":"dmg","asset":"Agents-Anywhere-latest.dmg"}]}' >> "$GITHUB_OUTPUT"
+          else
+            echo 'matrix={"include":[{"os":"macos-15","platform":"mac","arch":"universal","extension":"dmg","asset":"Agents-Anywhere-latest.dmg"},{"os":"windows-latest","platform":"win","arch":"x64","extension":"exe","asset":"Agents-Anywhere-Setup-latest.exe"}]}' >> "$GITHUB_OUTPUT"
           fi
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
@@ -69,18 +89,7 @@ jobs:
     needs: validate
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: macos-15
-            platform: mac
-            arch: universal
-            extension: dmg
-            asset: Agents-Anywhere-latest.dmg
-          - os: windows-latest
-            platform: win
-            arch: x64
-            extension: exe
-            asset: Agents-Anywhere-Setup-latest.exe
+      matrix: ${{ fromJSON(needs.validate.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     env:
@@ -97,6 +106,22 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ needs.validate.outputs.commit }}
+          fetch-depth: 0
+      - name: 应用通用包合并规则修复
+        if: needs.validate.outputs.repair == 'true'
+        env:
+          PACKAGING_COMMIT: ${{ github.sha }}
+        run: |
+          node --input-type=module <<'JS'
+          import { execFileSync } from "node:child_process";
+          import { readFileSync, writeFileSync } from "node:fs";
+          const fixed = JSON.parse(execFileSync("git", ["show", `${process.env.PACKAGING_COMMIT}:desktop-workbench/package.json`], { encoding: "utf8" }));
+          const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+          // 业务源码仍来自版本标签，只应用本次修复的打包白名单。
+          pkg.build.mac.x64ArchFiles = fixed.build.mac.x64ArchFiles;
+          writeFileSync("package.json", `${JSON.stringify(pkg, null, 2)}\n`);
+          writeFileSync("scripts/mac-universal.test.mjs", execFileSync("git", ["show", `${process.env.PACKAGING_COMMIT}:desktop-workbench/scripts/mac-universal.test.mjs`]));
+          JS
       - name: 安装桌面依赖
         uses: ./.github/actions/setup-yarn
         with:
@@ -130,6 +155,7 @@ jobs:
         run: |
           corepack yarn test:main
           corepack yarn renderer:typecheck
+          if [[ -f scripts/mac-universal.test.mjs ]]; then node --test scripts/mac-universal.test.mjs; fi
       - name: 构建安装包
         env:
           MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
@@ -195,6 +221,7 @@ jobs:
           merge-multiple: true
           path: assets
       - name: 校验并发布正式 Release
+        if: needs.validate.outputs.repair != 'true'
         working-directory: assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -219,6 +246,23 @@ jobs:
             Agents-Anywhere-latest.dmg Agents-Anywhere-latest.dmg.sha256 \
             Agents-Anywhere-Setup-latest.exe Agents-Anywhere-Setup-latest.exe.sha256
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest --notes-file notes.md
+      - name: 追加缺失的 Mac 安装包
+        if: needs.validate.outputs.repair == 'true'
+        working-directory: assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
+          PACKAGING_COMMIT: ${{ github.sha }}
+        run: |
+          test -s Agents-Anywhere-latest.dmg
+          sha256sum -c Agents-Anywhere-latest.dmg.sha256
+          # 不使用 --clobber，绝不替换任何已发布文件。
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            Agents-Anywhere-latest.dmg Agents-Anywhere-latest.dmg.sha256
+          printf 'Windows x64；macOS 通用包（Apple Silicon / Intel）。\n\n安装包未签名、未公证，尚未进行真实安装验证。\n\n业务源码：%s\nmacOS 打包规则修复：%s\nWindows 包保持原发布附件不变。\n' \
+            "$RELEASE_COMMIT" "$PACKAGING_COMMIT" > notes.md
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
 
   deploy:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')

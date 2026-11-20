@@ -51,7 +51,9 @@ git push origin v2.2.1
 
 签名是可选的，凭据必须放在仓库 Actions Secrets：macOS 使用 `MAC_CERT_P12_BASE64`、`MACOS_SIGN_IDENTITY`、`CSC_KEY_PASSWORD`，Apple 公证使用 `APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`；Windows 使用 `WIN_CERT_P12_BASE64`、`WIN_CSC_KEY_PASSWORD`。不配置时构建未签名、未公证包，系统可能阻止启动，不能当作已签名正式发行包；不完整的凭据会使构建失败。流水线检查不代替真实安装和 OAuth 验证。
 
-首次补包：在 `self-hosted` 分支推送本桌面工作流文件的变更，也会触发构建，自动读取 Server 版本并检出同名既有标签；仅补安装包，不部署 Server、不移动标签。已发布的正式 Release 不允许覆盖；失败后可以重跑草稿发布。不要手动把无附件 Release 设置为 Latest。
+首次补包：在 `self-hosted` 分支推送本桌面工作流、桌面 `package.json` 或通用包回归测试的变更，也会触发构建，自动读取 Server 版本并检出同名既有标签；仅补安装包，不部署 Server、不移动标签。已发布的正式 Release 不允许覆盖；失败后可以重跑草稿发布。不要手动把无附件 Release 设置为 Latest。
+
+如果正式 Release 已包含 Windows 安装包及校验文件、但完全缺少 Mac 附件，分支触发会只构建 Mac 通用包，并追加两个缺失附件，绝不替换 Windows 文件。业务源码仍检出版本标签，只从触发提交应用 `x64ArchFiles` 打包规则及回归测试；发布说明记录业务与打包修复两个提交。其他缺包状态停止处理，需要人工核查。
 
 手动触发要求仓库默认分支也包含本工作流；满足这个条件后，已有标签可在「自部署桌面发布」选择 `self-hosted` 分支，填写 `release_tag` 后手动补包，不再次部署 Server。
 
