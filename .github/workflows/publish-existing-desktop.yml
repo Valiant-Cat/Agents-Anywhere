@@ -1,0 +1,83 @@
+name: 发布已有桌面安装包
+
+on:
+  push:
+    branches: [self-hosted]
+    paths: [.github/workflows/publish-existing-desktop.yml]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 已完成桌面构建的工作流运行 ID
+        required: true
+        type: string
+      release_tag:
+        description: 对应的正式版本标签
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-existing-desktop
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: ${{ inputs.run_id || '44522092622' }}
+      RELEASE_TAG: ${{ inputs.release_tag || 'v2.2.2' }}
+    steps:
+      - name: 检出发布历史
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: 核验构建来源
+        shell: bash
+        run: |
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > run.json
+          SOURCE_COMMIT=$(python3 -c 'import json; print(json.load(open("run.json"))["head_sha"])')
+          git merge-base --is-ancestor "refs/tags/$RELEASE_TAG" "$SOURCE_COMMIT"
+          git show "$SOURCE_COMMIT:server/pyproject.toml" > source-version.toml
+          python3 - <<'PY'
+          import json
+          import os
+          import tomllib
+          run = json.load(open("run.json"))
+          assert run["path"] == ".github/workflows/desktop-release.yml"
+          assert run["head_branch"] == "self-hosted" or run["head_branch"] == os.environ["RELEASE_TAG"]
+          version = tomllib.load(open("source-version.toml", "rb"))["project"]["version"]
+          assert os.environ["RELEASE_TAG"] == f"v{version}"
+          PY
+      - name: 下载已有 Windows 安装包
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ env.SOURCE_RUN }}
+          name: desktop-win
+          path: assets
+      - name: 校验并发布 Windows 安装包
+        working-directory: assets
+        shell: bash
+        run: |
+          test -s Agents-Anywhere-Setup-latest.exe
+          sha256sum -c Agents-Anywhere-Setup-latest.exe.sha256
+          test "$(head -c 2 Agents-Anywhere-Setup-latest.exe)" = MZ
+          # 附件由正式桌面工作流校验过包内版本和自部署配置。
+          printf 'Windows x64 安装包。\n\nmacOS 安装包暂缺：GitHub macOS 构建节点容量不足，构建尚未完成。\n\nWindows 安装包未签名，尚未进行真实 Windows 安装验证。\n\n构建记录：https://github.com/%s/actions/runs/%s\n' \
+            "$GITHUB_REPOSITORY" "$SOURCE_RUN" > notes.md
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft > release.json; then
+            python3 -c 'import json; assert json.load(open("release.json"))["isDraft"], "不覆盖已发布版本"'
+          else
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --draft --title "$RELEASE_TAG" --notes-file notes.md
+          fi
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            Agents-Anywhere-Setup-latest.exe Agents-Anywhere-Setup-latest.exe.sha256
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --draft=false --latest --notes-file notes.md
