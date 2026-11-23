@@ -35,6 +35,7 @@ import {
   type DesktopOnboardingEntry,
 } from "./desktop-onboarding";
 import { DesktopUpdateService } from "./desktop-updates";
+import { openUpdateInstaller } from "./update-installer";
 import { nextSilentLaunchState, shouldLaunchSilently, type SilentLaunchState } from "./silent-launch";
 import { validateTitleBarColors, validateWindowTheme } from "./title-bar";
 import type { BackendInit } from "./backend/protocol";
@@ -1118,8 +1119,28 @@ if (hasSingleInstanceLock) {
       fetcher: (input, init) => net.fetch(String(input), init),
       openInstaller: async (filePath) => {
         if (process.platform === "linux") await fs.promises.chmod(filePath, 0o700);
-        const error = await shell.openPath(filePath);
-        if (error) throw new Error(error);
+        await openUpdateInstaller(filePath, {
+          platform: process.platform,
+          isPackaged: app.isPackaged,
+          openPath: (file) => shell.openPath(file),
+          confirmQuit: async () => {
+            const options = {
+              type: "info" as const,
+              title: "退出并安装更新",
+              message: "更新安装包已打开，是否退出当前版本？",
+              detail: "退出后本机将暂时离线，正在运行的本机会话可能中断。请在安装窗口中将新版拖入 Applications 并替换旧版，完成后重新打开应用。",
+              buttons: ["暂不退出", "退出并安装"],
+              defaultId: 1,
+              cancelId: 0,
+              noLink: true,
+            };
+            const result = mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()
+              ? await dialog.showMessageBox(mainWindow, options)
+              : await dialog.showMessageBox(options);
+            return result.response === 1;
+          },
+          quit: () => requestQuit(),
+        });
       },
       onState: (state) => sendToRenderer("workbench:updates:state", state),
     });
