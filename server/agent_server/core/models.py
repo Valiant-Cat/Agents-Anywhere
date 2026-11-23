@@ -250,6 +250,9 @@ class AuthResponse(BaseModel):
     role: UserRoleName
     accessToken: str
     tokenType: str = "bearer"
+    # Present when the server chose a shorter lifetime than the default
+    # (identity-token exchanges issue short-lived sessions).
+    expiresIn: int | None = None
     serverTime: str
 
 
@@ -271,6 +274,9 @@ class AuthConfigResponse(BaseModel):
     oauthRegistrationOpen: bool = False
     oauthEnabled: bool = False
     oauthProviderLabel: str | None = None
+    # True when this server can exchange an identity-provider access token for
+    # an AA session (native clients that already hold an IdP token).
+    oauthExchangeEnabled: bool = False
     # True only when the instance enabled self-service password reset and
     # email delivery is configured.
     passwordResetEnabled: bool = False
@@ -539,6 +545,7 @@ class OAuthProviderPublicConfig(BaseModel):
     subjectClaim: str = "sub"
     emailClaim: str = "email"
     nameClaim: str = "name"
+    emailVerifiedClaim: str = "email_verified"
 
 
 class OAuthProviderConfigUpdate(OAuthProviderPublicConfig):
@@ -564,6 +571,14 @@ class InstanceSettingsUpdateRequest(BaseModel):
 class OAuthStartResponse(BaseModel):
     authorizeUrl: str
     serverTime: str
+
+
+class OAuthTokenExchangeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Access token issued by the configured identity provider; the server
+    # verifies it against the provider's userinfo endpoint.
+    accessToken: str = Field(min_length=1, max_length=8192)
 
 
 class OAuthCallbackResponse(BaseModel):

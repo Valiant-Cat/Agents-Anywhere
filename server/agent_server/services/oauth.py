@@ -23,6 +23,7 @@ class OAuthIdentity:
     suggested_user_id: str
     email: str | None
     display_name: str | None
+    email_verified: bool = False
 
 
 class OAuthConfigError(ValueError):
@@ -100,6 +101,31 @@ async def exchange_code_for_identity(
     return identity_from_claims(config, claims)
 
 
+async def identity_from_access_token(config: dict[str, Any], *, access_token: str) -> OAuthIdentity:
+    """Verify an identity-provider access token and read its identity.
+
+    Native clients that already authenticated against the same provider can
+    present its access token instead of running the browser redirect.
+    """
+    _require_enabled_config(config)
+    userinfo_url = str(config.get("userInfoUrl") or "")
+    if not userinfo_url:
+        raise OAuthConfigError("oauth config missing: userInfoUrl")
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(
+                userinfo_url,
+                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            )
+            response.raise_for_status()
+            claims = response.json()
+    except httpx.HTTPError as exc:
+        raise OAuthConfigError(f"oauth access token rejected: {exc}") from exc
+    if not isinstance(claims, dict):
+        raise OAuthConfigError("oauth userinfo did not return an object")
+    return identity_from_claims(config, claims)
+
+
 def return_to_from_state(config: dict[str, Any], state: str | None) -> str | None:
     if not state:
         return None
@@ -119,6 +145,7 @@ def identity_from_claims(config: dict[str, Any], claims: dict[str, Any]) -> OAut
     username_claim = str(config.get("usernameClaim") or "preferred_username")
     email_claim = str(config.get("emailClaim") or "email")
     name_claim = str(config.get("nameClaim") or "name")
+    email_verified_claim = str(config.get("emailVerifiedClaim") or "email_verified")
     subject = _claim_text(claims, subject_claim)
     if not subject:
         raise OAuthConfigError(f"oauth userinfo missing subject claim: {subject_claim}")
@@ -132,6 +159,7 @@ def identity_from_claims(config: dict[str, Any], claims: dict[str, Any]) -> OAut
         suggested_user_id=normalize_suggested_user_id(suggested),
         email=email,
         display_name=display_name,
+        email_verified=_claim_bool(claims, email_verified_claim),
     )
 
 
@@ -206,6 +234,17 @@ def _require_enabled_config(config: dict[str, Any]) -> None:
 
 def _provider(config: dict[str, Any]) -> str:
     return str(config.get("provider") or "oidc").strip().lower()
+
+
+def _claim_bool(claims: dict[str, Any], key: str) -> bool:
+    value = claims.get(key)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes"}
+    return False
 
 
 def _claim_text(claims: dict[str, Any], key: str) -> str | None:

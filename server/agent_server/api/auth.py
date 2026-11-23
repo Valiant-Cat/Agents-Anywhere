@@ -36,6 +36,7 @@ from agent_server.core.models import (
     MobileLoginStatusRequest,
     MobileLoginStatusResponse,
     OAuthFinalizeRequest,
+    OAuthTokenExchangeRequest,
     OAuthFinalizeResponse,
     OAuthStartResponse,
     UpdateAvatarRequest,
@@ -60,6 +61,7 @@ from agent_server.services.oauth import (
     build_authorize_url,
     create_pending_token,
     exchange_code_for_identity,
+    identity_from_access_token,
     oauth_enabled,
     return_to_from_state,
     verify_pending_token,
@@ -72,6 +74,11 @@ def _setup_token(request: Request) -> SetupTokenService:
 
 
 router = APIRouter(tags=["auth"])
+
+# Tokens obtained by exchanging another identity provider's access token are
+# short-lived: the client re-exchanges while the DSH identity is still signed
+# in, so signing out of that identity ends the AA session within this window.
+OAUTH_EXCHANGE_TOKEN_TTL = 15 * 60
 MOBILE_LOGIN_TOKEN_KIND = "mobile_login"
 MOBILE_REFRESH_TOKEN_KIND = "mobile_refresh"
 MOBILE_LOGIN_EXPIRES_IN = 120
@@ -105,6 +112,7 @@ async def auth_config(
         oauthRegistrationOpen=await db.is_oauth_registration_open(),
         oauthEnabled=oauth_enabled(oauth_config),
         oauthProviderLabel=str(oauth_config.get("label") or "OAuth") if oauth_enabled(oauth_config) else None,
+        oauthExchangeEnabled=oauth_enabled(oauth_config),
         passwordResetEnabled=email_enabled and await db.is_password_reset_enabled(),
         setupTokenExpiresAt=expires_at,
         serverTime=utc_now(),
@@ -382,6 +390,69 @@ async def oauth_finalize(
     return OAuthFinalizeResponse(auth=_auth_response(user), serverTime=utc_now())
 
 
+@router.post("/auth/oauth/exchange", response_model=AuthResponse)
+async def oauth_exchange(
+    payload: OAuthTokenExchangeRequest,
+    db: Store = Depends(get_store),
+) -> AuthResponse:
+    """Turn a configured identity provider's access token into an AA session.
+
+    Native clients that already hold an IdP token (for example a desktop app
+    signed in with the same unified identity) use this instead of the browser
+    redirect. The token is verified against the instance's OIDC userinfo, so an
+    arbitrary token is never trusted on its own.
+    """
+    config = await db.get_oauth_provider_config()
+    if not oauth_enabled(config):
+        raise HTTPException(status_code=404, detail="oauth login is not enabled")
+    try:
+        identity = await identity_from_access_token(config, access_token=payload.accessToken)
+    except OAuthConfigError as exc:
+        raise HTTPException(status_code=401, detail="oauth access token is invalid") from exc
+    bound = await db.oauth_user_for_subject(provider=identity.provider, subject=identity.subject)
+    if bound is not None:
+        return _exchange_response(bound)
+    # An existing account may be linked only when the provider asserted a
+    # verified email: silently linking an unverified address would let a token
+    # holder take over that account.
+    if identity.email:
+        try:
+            target = await db.user_for_email(identity.email)
+        except ValueError:
+            target = None
+        if target is not None:
+            if not identity.email_verified:
+                raise HTTPException(
+                    status_code=409,
+                    detail="oauth email is not verified; sign in once in the browser to link this account",
+                )
+            user = await db.bind_oauth_account(
+                user_id=target.userId,
+                provider=identity.provider,
+                subject=identity.subject,
+                email=identity.email,
+                display_name=identity.display_name,
+            )
+            return _exchange_response(user)
+    if not identity.email:
+        raise HTTPException(status_code=409, detail="oauth identity did not include an email")
+    if not await db.is_oauth_registration_open():
+        raise HTTPException(status_code=403, detail="oauth registration is closed")
+    user = await db.create_email_user(
+        email=identity.email,
+        display_name=identity.display_name or identity.suggested_user_id,
+        password=secrets.token_urlsafe(32),
+        require_verification=False,
+        oauth_account={
+            "provider": identity.provider,
+            "subject": identity.subject,
+            "email": identity.email,
+            "display_name": identity.display_name,
+        },
+    )
+    return _exchange_response(user)
+
+
 @router.get("/auth/me", response_model=AuthMeResponse)
 async def auth_me(user: UserView = Depends(current_user)) -> AuthMeResponse:
     return _me_response(user)
@@ -599,6 +670,17 @@ def _me_response(user: UserView) -> AuthMeResponse:
         userId=user.userId, email=user.email, emailVerified=user.emailVerified,
         displayName=user.displayName, role=user.role, disabled=user.disabled,
         avatar=user.avatar, serverTime=utc_now(),
+    )
+
+
+def _exchange_response(user: UserView) -> AuthResponse:
+    return AuthResponse(
+        userId=user.userId,
+        role=user.role,
+        email=user.email, emailVerified=user.emailVerified, displayName=user.displayName,
+        accessToken=create_user_access_token(user.userId, expires_in=OAUTH_EXCHANGE_TOKEN_TTL),
+        expiresIn=OAUTH_EXCHANGE_TOKEN_TTL,
+        serverTime=utc_now(),
     )
 
 

@@ -4,6 +4,10 @@
 
 ## 未发布
 
+### 统一身份
+
+- 自托管实例支持用统一身份提供方令牌换取 15 分钟 AA 会话；已绑定账号可直接登录，新账号遵循 OAuth 注册开关。
+
 ### 升级须知
 
 - 运行中排队消息需要 Server 执行 `v2_56` 数据库迁移（只新增两张表，不改写已有数据）；排队在 Web、Desktop、Android 和 iOS 上可用，旧版客户端的行为不变。（[#658](https://github.com/anywhere-labs/Agents-Anywhere/pull/658)、[#659](https://github.com/anywhere-labs/Agents-Anywhere/pull/659)）
