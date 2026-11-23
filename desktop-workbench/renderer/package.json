@@ -1,12 +1,12 @@
 {
   "name": "agents-anywhere-desktop-renderer",
   "private": true,
-  "version": "2.2.3",
+  "version": "2.2.4",
   "packageManager": "yarn@4.6.0",
   "type": "module",
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1 --port 5184",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start --hostname 127.0.0.1 --port 5184",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
