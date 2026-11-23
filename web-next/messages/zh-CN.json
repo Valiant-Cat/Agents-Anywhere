@@ -1238,7 +1238,7 @@
       "desktopInstallTitle": "使用桌面程序连接",
       "desktopInstallDescription": "前往 GitHub Releases 下载 Agents Anywhere 桌面程序，然后按照下方步骤完成连接。",
       "desktopDownloadTitle": "下载并安装",
-      "desktopInstallStepDownload": "在发布页面的 Assets 中选择安装包：Windows 下载 .exe；macOS 根据芯片选择 Apple Silicon 或 Intel 的 .dmg。下载后完成安装。",
+      "desktopInstallStepDownload": "在发布页面的 Assets 中选择安装包：Windows 下载 .exe；macOS 下载通用 .dmg（支持 Apple Silicon 和 Intel）。下载后完成安装。",
       "desktopLoginTitle": "打开程序并登录",
       "desktopInstallStepLogin": "打开桌面程序，连接到您当前使用的服务，并使用同一个账号登录。",
       "desktopOnlineTitle": "等待设备上线",

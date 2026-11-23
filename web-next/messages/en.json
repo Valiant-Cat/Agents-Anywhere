@@ -1238,7 +1238,7 @@
       "desktopInstallTitle": "Connect using the desktop app",
       "desktopInstallDescription": "Download Agents Anywhere Desktop from GitHub Releases, then follow the steps below to connect.",
       "desktopDownloadTitle": "Download and install",
-      "desktopInstallStepDownload": "Choose an installer under Assets: the .exe for Windows, or the Apple Silicon or Intel .dmg for your Mac. Download it and complete the installation.",
+      "desktopInstallStepDownload": "Choose an installer under Assets: the .exe for Windows, or the universal .dmg for macOS (Apple Silicon and Intel). Download it and complete the installation.",
       "desktopLoginTitle": "Open the app and sign in",
       "desktopInstallStepLogin": "Open the desktop app, connect to the service you are using here, and sign in with the same account.",
       "desktopOnlineTitle": "Wait for your device to connect",

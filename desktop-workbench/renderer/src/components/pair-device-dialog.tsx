@@ -58,7 +58,7 @@ const NOUNS = [
   "quartz", "raven", "ridge", "river", "rocket", "sequoia", "sparrow", "summit", "willow", "zephyr",
 ]
 
-const DESKTOP_DOWNLOAD_URL = "https://github.com/anywhere-labs/Agents-Anywhere/releases/latest"
+const DESKTOP_DOWNLOAD_URL = "https://github.com/Valiant-Cat/Agents-Anywhere/releases/latest"
 
 type CliMethod = "command" | "pair-code"
 type Step =
@@ -394,7 +394,6 @@ export function PairDeviceDialog({
                         <ExternalLink data-icon="inline-end" />
                       </a>
                     </Button>
-                    <Button type="button" onClick={() => completePairing()}>{tCommon("done")}</Button>
                   </div>
                 </DialogFooter>
               </>

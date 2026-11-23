@@ -110,6 +110,16 @@ bash desktop-workbench/scripts/build-install-mac.sh
 此配置不影响版本检查，下载服务需自行部署，修改后需重新构建安装。
 没有覆盖 Cloud 地址及下载地址时，保留源码中的官方更新默认值。
 
+macOS 安装版下载更新后会先挂载 DMG，检查应用标识、版本和已有签名完整性；
+用户确认后退出本机连接，由独立进程等待旧应用退出，再替换原位置并请求启动新版。
+安装目录必须可写，不能从 DMG 或 App Translocation 目录直接更新；不会自动提权。
+旧版保留在安装目录旁的 `.aa-update-*/previous.app`，用户数据不会删除；
+替换失败或系统启动命令返回失败时尝试恢复旧版。
+启动命令成功不等于新版已经健康运行，因此备份不会自动删除。
+日志位于应用用户数据目录的 `updates/logs/`。
+构建电脑不影响这套文件替换流程；签名身份、公证状态变化仍可能触发系统安全确认或权限重新授权，
+更新器不会删除隔离属性或绕过 Gatekeeper，也不保证跨签名身份无感升级。
+
 The login page offers **Agents Anywhere Cloud** and an expandable self-hosted
 server form. Both check `GET /api/v2/health` and require `status: "ok"` before
 opening sign-in. HTTP errors, invalid responses, and a 10-second timeout stay on

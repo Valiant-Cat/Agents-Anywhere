@@ -36,6 +36,7 @@ import {
 } from "./desktop-onboarding";
 import { DesktopUpdateService } from "./desktop-updates";
 import { openUpdateInstaller } from "./update-installer";
+import { prepareMacUpdate } from "./mac-update";
 import { nextSilentLaunchState, shouldLaunchSilently, type SilentLaunchState } from "./silent-launch";
 import { validateTitleBarColors, validateWindowTheme } from "./title-bar";
 import type { BackendInit } from "./backend/protocol";
@@ -1118,6 +1119,42 @@ if (hasSingleInstanceLock) {
       healthTimeoutMs: config.healthTimeoutMs,
       fetcher: (input, init) => net.fetch(String(input), init),
       openInstaller: async (filePath) => {
+        if (process.platform === "darwin" && app.isPackaged) {
+          const installation = await prepareMacUpdate({
+            installer: filePath,
+            appPath: path.resolve(app.getAppPath(), "../../.."),
+            appId: APP_ID,
+            currentVersion: app.getVersion(),
+            logsDirectory: path.join(app.getPath("userData"), "updates", "logs"),
+          });
+          let started = false;
+          try {
+            const options = {
+              type: "warning" as const,
+              title: "安装更新",
+              message: "退出并替换为已下载的新版本？",
+              detail: [
+                "本机将暂时离线，正在运行的本机会话可能中断。用户数据不会删除。",
+                installation.unsigned ? "新版未签名，首次启动可能需要在系统设置中确认允许打开。" : "新版签名完整；签名身份变化或未经公证时，系统仍可能要求重新授权。",
+                `旧版备份将保留在：${installation.backup}`,
+              ].join("\n\n"),
+              buttons: ["取消", "退出并安装"],
+              defaultId: 0,
+              cancelId: 0,
+              noLink: true,
+            };
+            const result = mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()
+              ? await dialog.showMessageBox(mainWindow, options)
+              : await dialog.showMessageBox(options);
+            if (result.response !== 1) return;
+            await installation.start();
+            started = true;
+            await requestQuit();
+          } finally {
+            if (!started) await installation.cancel();
+          }
+          return;
+        }
         if (process.platform === "linux") await fs.promises.chmod(filePath, 0o700);
         await openUpdateInstaller(filePath, {
           platform: process.platform,
