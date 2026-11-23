@@ -1,0 +1,5 @@
+- insert:
+    - id: agents-anywhere
+      name: '@vvicat/dsh-agents-anywhere'
+      config:
+        serverUrl: https://aa.xmfind.cn

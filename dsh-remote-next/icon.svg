@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Agents Anywhere remote">
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#111827"/>
+  <rect x="12" y="20" width="17" height="24" rx="4" fill="none" stroke="#f9fafb" stroke-width="3"/>
+  <rect x="35" y="20" width="17" height="24" rx="4" fill="none" stroke="#f9fafb" stroke-width="3"/>
+  <path d="M29 32h6" stroke="#a5b4fc" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 3"/>
+</svg>

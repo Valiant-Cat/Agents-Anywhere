@@ -17,6 +17,7 @@ Agents Anywhere 是一个跨设备的 Agent 工作台。工作设备上的 **Con
 | `android/` | Android 客户端，见 `android/ARCHITECTURE.md` | Kotlin、Gradle、JDK 17 |
 | `ios/` | iOS / iPadOS 客户端，见 `ios/ARCHITECTURE.md` | Swift、Xcode |
 | `dsh-bridge-next/` | **当前** DSH 插件（npm 包，也随 DSH Desktop 分发） | TypeScript、Yarn |
+| `dsh-remote-next/` | **新增** DSH 反向插件：在 DSH 里作为客户端使用 Agents Anywhere（侧边栏入口 + 「更多」菜单设备列表 + 设备/会话/时间线/发消息工具） | JavaScript（零依赖，无构建步骤） |
 | `contracts/` | 跨端契约与 fixtures，按 `<name>/<version>/` 组织 | JSON Schema / 文档 |
 | `docker/` | 自托管部署与本地数据库 compose | Docker Compose |
 | `docs/` | 使用、开发、API、Runtime 协议、发布说明 | — |

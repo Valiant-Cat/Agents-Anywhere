@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Agents Anywhere",
+    "description": "登录 Agents Anywhere 后，在 DSH 里查看设备与远程会话、读取时间线；侧边栏入口和「更多」菜单都可以打开。",
+    "detail": "docs/DETAIL.md"
+  }
+}

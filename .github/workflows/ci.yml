@@ -115,6 +115,7 @@ jobs:
                   run_everything "shared file changed: $path"
                   ;;
                 dsh-bridge-next/*) plugin=true ;;
+                dsh-remote-next/*) plugin=true ;;
                 # Plugin integration tests run the Connector's DSH probe and the
                 # Server tests import the Connector package.
                 connector/scripts/verify-acp-runtime.py|connector/scripts/verify-acp-processes.py|connector/scripts/verify-acp-generic-boundary.py|connector/scripts/verify-pi-managed.py)
@@ -191,6 +192,10 @@ jobs:
           # Nested Python probes reuse the prepared environments, without repeated resolution.
           UV_NO_SYNC: "true"
         run: corepack yarn check
+      - name: Check reverse plugin
+        # Zero-dependency Host bundle: syntax check plus node:test against a stub Server.
+        working-directory: dsh-remote-next
+        run: npm run check
 
   connector:
     name: Connector tests

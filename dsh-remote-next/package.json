@@ -1,0 +1,44 @@
+{
+  "name": "@vvicat/dsh-agents-anywhere",
+  "version": "0.2.0",
+  "description": "Use Agents Anywhere devices, sessions, and remote runtimes from DeepSeek Harness",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "docs",
+    "icon.svg",
+    "README.md",
+    "bindings.js",
+    "remote-session.js"
+  ],
+  "scripts": {
+    "check": "node --check index.js && node --check client.js && node --test test/*.test.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  }
+}

@@ -4,12 +4,9 @@
 
 ## 未发布
 
-### 统一身份
-
-- 自托管实例支持用统一身份提供方令牌换取 15 分钟 AA 会话；已绑定账号可直接登录，新账号遵循 OAuth 注册开关。
-
 ### 升级须知
 
+- 自托管实例升级到包含 `POST /api/v2/auth/oauth/exchange` 的 Server 后，DSH 插件可以直接用侠猫统一身份登录 AA；Cloud 暂不支持该接口。
 - 运行中排队消息需要 Server 执行 `v2_56` 数据库迁移（只新增两张表，不改写已有数据）；排队在 Web、Desktop、Android 和 iOS 上可用，旧版客户端的行为不变。（[#658](https://github.com/anywhere-labs/Agents-Anywhere/pull/658)、[#659](https://github.com/anywhere-labs/Agents-Anywhere/pull/659)）
 
 ### 会话创建与消息交付
@@ -18,6 +15,10 @@
 - Agent 运行中，Web、Desktop、Android 和 iOS 都可以继续发送消息：消息会排队，当前任务结束后按顺序自动发出，在所有设备上看到的是同一份队列；排队的消息可以编辑、删除、立即发送（打断当前任务），也可以选择「打断并发送」，Codex、Pi、Hermes 还能选择「引导当前任务」把消息直接交给正在运行的任务。上一个任务出错时队列会暂停，点「继续发送」后再发出。（[#658](https://github.com/anywhere-labs/Agents-Anywhere/pull/658)、[#659](https://github.com/anywhere-labs/Agents-Anywhere/pull/659)）
 - 在工作设备安装并配置对应 CLI 后，可以在 Web、Desktop、Android 和 iOS 选择 Command Code、OpenCode、Google Antigravity、MiniMax Code、CodeBuddy Code 和 MiMo Code 新建会话，并按 Agent 支持的能力发送消息、处理审批、中断和恢复 AA 会话。（[#629](https://github.com/anywhere-labs/Agents-Anywhere/pull/629)）
 - Pi 会话现在支持 `/plan`，可以从首条任务开始规划、审阅和修改计划，并在同意后按原有工具权限继续执行。（[#631](https://github.com/anywhere-labs/Agents-Anywhere/pull/631)）
+
+### DSH 同步
+
+- 在 DSH 里可以直接使用 Agents Anywhere：会话完全跟随 DSH 的侠猫统一身份，插件不提供单独登录或退出；DSH 退出后 AA 会话会在 15 分钟内失效；侧边栏新增「Agents Anywhere」入口，并在「更多」菜单里直接列出设备；点开可以查看设备和最近会话、加载完整正文与更早记录，明确接管后可继续发送消息、中断、释放接管及手动回复交互；在对话里也能让 Agent 列出设备和会话、读取最近的时间线、向远程 Agent 发消息。任务仍在远程设备上执行。
 
 ### Desktop
 
