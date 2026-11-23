@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import secrets
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode
@@ -42,19 +45,22 @@ def oauth_enabled(config: dict[str, Any] | None) -> bool:
 
 def build_authorize_url(config: dict[str, Any], *, redirect_uri: str, return_to: str | None = None) -> str:
     _require_enabled_config(config)
-    state = None
+    payload: dict[str, Any] = {"provider": _provider(config)}
     if return_to:
-        state = create_signed_token(
-            OAUTH_STATE_TOKEN_KIND,
-            {"provider": _provider(config), "returnTo": return_to},
-            OAUTH_TOKEN_EXPIRES_IN,
-        )
+        payload["returnTo"] = return_to
+    challenge = None
+    if not config.get("clientSecret"):
+        verifier = _new_code_verifier()
+        payload["codeVerifier"] = verifier
+        challenge = _code_challenge(verifier)
+    state = create_signed_token(OAUTH_STATE_TOKEN_KIND, payload, OAUTH_TOKEN_EXPIRES_IN)
     params = {
         "client_id": str(config["clientId"]),
         "redirect_uri": redirect_uri,
         "response_type": "code",
         "scope": str(config.get("scopes") or "openid profile email"),
-        **({"state": state} if state else {}),
+        "state": state,
+        **({"code_challenge": challenge, "code_challenge_method": "S256"} if challenge else {}),
     }
     return f"{config['authorizeUrl']}?{urlencode(params)}"
 
@@ -68,23 +74,29 @@ async def exchange_code_for_identity(
 ) -> OAuthIdentity:
     _require_enabled_config(config)
     provider = _provider(config)
+    state_payload = None
     if state:
         state_payload = verify_signed_token(OAUTH_STATE_TOKEN_KIND, state)
         if not state_payload or state_payload.get("provider") != provider:
             raise OAuthConfigError("invalid oauth state")
-    missing = [key for key in ("tokenUrl", "userInfoUrl", "clientSecret") if not config.get(key)]
+    missing = [key for key in ("tokenUrl", "userInfoUrl") if not config.get(key)]
     if missing:
         raise OAuthConfigError(f"oauth config missing: {', '.join(missing)}")
+    form = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect_uri,
+        "client_id": str(config["clientId"]),
+    }
+    if config.get("clientSecret"):
+        form["client_secret"] = str(config["clientSecret"])
+    verifier = (state_payload or {}).get("codeVerifier")
+    if isinstance(verifier, str) and verifier:
+        form["code_verifier"] = verifier
     async with httpx.AsyncClient(timeout=10) as client:
         token_response = await client.post(
             str(config["tokenUrl"]),
-            data={
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": redirect_uri,
-                "client_id": str(config["clientId"]),
-                "client_secret": str(config["clientSecret"]),
-            },
+            data=form,
             headers={"Accept": "application/json"},
         )
         token_response.raise_for_status()
@@ -102,11 +114,7 @@ async def exchange_code_for_identity(
 
 
 async def identity_from_access_token(config: dict[str, Any], *, access_token: str) -> OAuthIdentity:
-    """Verify an identity-provider access token and read its identity.
-
-    Native clients that already authenticated against the same provider can
-    present its access token instead of running the browser redirect.
-    """
+    """Verify an identity-provider access token and read its identity."""
     _require_enabled_config(config)
     userinfo_url = str(config.get("userInfoUrl") or "")
     if not userinfo_url:
@@ -230,6 +238,15 @@ def _required_config(config: dict[str, Any]) -> bool:
 def _require_enabled_config(config: dict[str, Any]) -> None:
     if not oauth_enabled(config):
         raise OAuthConfigError("oauth is not configured")
+
+
+def _new_code_verifier() -> str:
+    return base64.urlsafe_b64encode(secrets.token_bytes(48)).rstrip(b"=").decode("ascii")
+
+
+def _code_challenge(verifier: str) -> str:
+    digest = hashlib.sha256(verifier.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
 
 def _provider(config: dict[str, Any]) -> str:

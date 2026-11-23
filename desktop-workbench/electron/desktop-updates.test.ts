@@ -36,6 +36,7 @@ function harness(t: TestContext, overrides: Partial<ConstructorParameters<typeof
 test("version comparison handles numeric segments, four-part releases and prereleases", () => {
   for (const [left, right, expected] of [
     ["0.1.10", "0.1.9", 1], ["0.1.7.2", "0.1.7", 1], ["v1.2.0+build", "1.2", 0],
+    ["2.2.0.2", "2.2.0.1", 1], ["2.2.0.1", "2.2.4", -1], ["2.2.10002", "2.2.10001", 1],
     ["1.0.0-rc.2", "1.0.0-rc.10", -1], ["1.0.0-rc.1", "1.0.0", -1],
     ["1.0.0", "1.0.0rc1", 1], ["0.1.0", "0.1.7.2", -1], ["invalid", "0.1.0", null],
   ] as const) assert.equal(compareUpdateVersions(left, right), expected);

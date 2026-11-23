@@ -4,11 +4,14 @@
 
 ## 未发布
 
-## 2.3.0（2026-11-23）
+## 2.2.0.1（2026-11-23）
 
-[自部署发布说明](docs/releases/2.3.0.md)
+[自部署发布说明](docs/releases/2.2.0.1.md)
 
 ### 升级须知
+
+- 自部署版本改用 `2.2.0.x`；原 `2.2.4` 客户端需手动安装一次新版，用户数据保留，之后继续按四段版本检查更新。
+- 自部署登录支持无客户端密钥的 PKCE 授权，升级时不再用旧登录补丁覆盖新的统一身份功能。
 
 - 自托管实例升级到包含 `POST /api/v2/auth/oauth/exchange` 的 Server 后，DSH 插件可以直接用侠猫统一身份登录 AA；Cloud 暂不支持该接口。
 - 运行中排队消息需要 Server 执行 `v2_56` 数据库迁移（只新增两张表，不改写已有数据）；排队在 Web、Desktop、Android 和 iOS 上可用，旧版客户端的行为不变。（[#658](https://github.com/anywhere-labs/Agents-Anywhere/pull/658)、[#659](https://github.com/anywhere-labs/Agents-Anywhere/pull/659)）

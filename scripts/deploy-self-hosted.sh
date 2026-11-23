@@ -23,12 +23,17 @@ gzip -dc image.tar.gz | docker load
 # 只有源文件与首次核对的版本一致，才允许应用已保留的线上登录补丁。
 expected=$(cat "$root/deploy/oauth-source.sha256")
 actual=$(docker run --rm --entrypoint sha256sum "$image" /app/server/agent_server/services/oauth.py)
-[[ "${actual%% *}" == "$expected" ]] || {
-    echo "OAuth 源码已变化，需人工合并线上 PKCE 补丁，停止部署"
-    exit 1
-}
-printf 'FROM %s\nCOPY oauth.py /app/server/agent_server/services/oauth.py\n' "$image" > "$root/deploy/Dockerfile"
-docker build -t "$image" "$root/deploy"
+overlay=$(sha256sum "$root/deploy/oauth.py")
+if [[ "${actual%% *}" == "${overlay%% *}" ]]; then
+    echo "源码已包含核对过的线上登录补丁，无需覆盖"
+else
+    [[ "${actual%% *}" == "$expected" ]] || {
+        echo "OAuth 源码已变化，需人工合并线上 PKCE 补丁，停止部署"
+        exit 1
+    }
+    printf 'FROM %s\nCOPY oauth.py /app/server/agent_server/services/oauth.py\n' "$image" > "$root/deploy/Dockerfile"
+    docker build -t "$image" "$root/deploy"
+fi
 cat > "$root/deploy/image.yml.tmp" <<EOF
 services:
   migrate-next:

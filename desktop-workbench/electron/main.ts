@@ -1112,7 +1112,7 @@ if (hasSingleInstanceLock) {
     await initializeDesktopServices();
     updates = new DesktopUpdateService({
       directory: path.join(app.getPath("userData"), "updates"),
-      currentVersion: app.getVersion(),
+      currentVersion: buildInfo.serverVersion,
       serverVersion: buildInfo.serverVersion,
       downloadUrls: config.updates.downloadUrls,
       platform: process.platform,

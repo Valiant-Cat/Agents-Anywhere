@@ -3,11 +3,6 @@ name: 自部署桌面发布
 on:
   push:
     tags: ['v*']
-    branches: [self-hosted-2.2.0]
-    paths:
-      - .github/workflows/desktop-release.yml
-      - desktop-workbench/package.json
-      - desktop-workbench/scripts/mac-universal.test.mjs
   workflow_dispatch:
     inputs:
       release_tag:
@@ -47,7 +42,7 @@ jobs:
           if [[ -z "$RELEASE_TAG" ]]; then
             RELEASE_TAG=$(python3 -c 'import tomllib; print("v" + tomllib.load(open("server/pyproject.toml", "rb"))["project"]["version"])')
           fi
-          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || exit 1
           export RELEASE_TAG
           git checkout --detach "refs/tags/$RELEASE_TAG"
           test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
@@ -133,6 +128,7 @@ jobs:
         run: |
           node --input-type=module <<'JS'
           import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+          import { packageVersion } from "./scripts/release-version.mjs";
           const server = new URL(process.env.CLOUD_SERVER_URL);
           if (server.protocol !== "https:" || server.username || server.password ||
               server.pathname !== "/" || server.search || server.hash) {
@@ -148,13 +144,14 @@ jobs:
             appendFileSync(process.env.GITHUB_ENV, `${name}=${value}\n`);
           }
           const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-          pkg.version = process.env.RELEASE_VERSION;
+          pkg.version = packageVersion(process.env.RELEASE_VERSION);
           writeFileSync("package.json", `${JSON.stringify(pkg, null, 2)}\n`);
           JS
       - name: 桌面无界面检查
         run: |
           corepack yarn test:main
           corepack yarn renderer:typecheck
+          node --test scripts/release-version.test.mjs
           if [[ -f scripts/mac-universal.test.mjs ]]; then node --test scripts/mac-universal.test.mjs; fi
       - name: 构建安装包
         env:
@@ -179,6 +176,7 @@ jobs:
           import { createRequire } from "node:module";
           import { copyFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
           import { createHash } from "node:crypto";
+          import { packageVersion } from "./scripts/release-version.mjs";
           const require = createRequire(import.meta.url);
           const asar = require("@electron/asar");
           const root = process.env.RELEASE_PLATFORM === "mac"
@@ -191,7 +189,7 @@ jobs:
           assert.equal(config.updates.downloadUrls.darwin, process.env.DESKTOP_UPDATE_MAC_URL);
           assert.equal(config.updates.downloadUrls.win32, process.env.DESKTOP_UPDATE_WINDOWS_URL);
           assert.equal(read("dist/build-info.json").serverVersion, process.env.RELEASE_VERSION);
-          assert.equal(read("package.json").version, process.env.RELEASE_VERSION);
+          assert.equal(read("package.json").version, packageVersion(process.env.RELEASE_VERSION));
           const files = readdirSync("release").filter((name) => name.endsWith(`.${process.env.RELEASE_EXTENSION}`));
           assert.equal(files.length, 1, "只能存在一个目标安装包");
           mkdirSync("release-assets", { recursive: true });
