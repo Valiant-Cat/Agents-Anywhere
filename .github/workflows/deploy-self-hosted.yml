@@ -35,9 +35,9 @@ jobs:
             echo "仅允许正式版本标签，例如 v2.2.1"
             exit 1
           }
-          git fetch origin self-hosted
-          git merge-base --is-ancestor HEAD origin/self-hosted || {
-            echo "标签提交必须属于 self-hosted 分支"
+          git fetch origin self-hosted-2.2.0
+          git merge-base --is-ancestor HEAD origin/self-hosted-2.2.0 || {
+            echo "标签提交必须属于 self-hosted-2.2.0 分支"
             exit 1
           }
           commit=$(git rev-parse HEAD)

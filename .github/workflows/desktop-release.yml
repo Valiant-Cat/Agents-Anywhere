@@ -3,7 +3,7 @@ name: 自部署桌面发布
 on:
   push:
     tags: ['v*']
-    branches: [self-hosted]
+    branches: [self-hosted-2.2.0]
     paths:
       - .github/workflows/desktop-release.yml
       - desktop-workbench/package.json
@@ -51,8 +51,8 @@ jobs:
           export RELEASE_TAG
           git checkout --detach "refs/tags/$RELEASE_TAG"
           test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
-          git fetch origin self-hosted
-          git merge-base --is-ancestor HEAD origin/self-hosted
+          git fetch origin self-hosted-2.2.0
+          git merge-base --is-ancestor HEAD origin/self-hosted-2.2.0
           python3 - <<'PY'
           import os
           import tomllib
@@ -65,7 +65,7 @@ jobs:
           # 仅分支补包允许向已有正式版本追加缺失的 Mac 包，不替换附件。
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,assets > release.json; then
             if python3 -c 'import json; assert not json.load(open("release.json"))["isDraft"]'; then
-              test "$GITHUB_REF" = refs/heads/self-hosted
+              test "$GITHUB_REF" = refs/heads/self-hosted-2.2.0
               python3 - <<'PY'
           import json
           names = {asset["name"] for asset in json.load(open("release.json"))["assets"]}

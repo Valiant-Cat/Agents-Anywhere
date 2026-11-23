@@ -2,7 +2,7 @@ name: 发布已有桌面安装包
 
 on:
   push:
-    branches: [self-hosted]
+    branches: [self-hosted-2.2.0]
     paths: [.github/workflows/publish-existing-desktop.yml]
   workflow_dispatch:
     inputs:
@@ -50,7 +50,7 @@ jobs:
           import tomllib
           run = json.load(open("run.json"))
           assert run["path"] == ".github/workflows/desktop-release.yml"
-          assert run["head_branch"] == "self-hosted" or run["head_branch"] == os.environ["RELEASE_TAG"]
+          assert run["head_branch"] == "self-hosted-2.2.0" or run["head_branch"] == os.environ["RELEASE_TAG"]
           version = tomllib.load(open("source-version.toml", "rb"))["project"]["version"]
           assert os.environ["RELEASE_TAG"] == f"v{version}"
           PY
