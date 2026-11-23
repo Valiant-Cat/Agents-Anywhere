@@ -68,7 +68,7 @@ export function RecentSessionsSection({
             type="button"
             aria-label={t("actions.markAllRead")}
             onClick={() => void onMarkAllRead()}
-            className="rounded-md p-0.5 text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="ml-auto shrink-0 rounded-md p-0.5 text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           >
             <CheckCheck className="size-3.5" />
           </button>

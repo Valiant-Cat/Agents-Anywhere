@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CheckCheck, ChevronRight } from "lucide-react"
+import { CheckCheck, ListFilter } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -52,12 +52,13 @@ export function SessionFilterMenu({
           variant="ghost"
           size="icon"
           aria-label={ariaLabel ?? t("actions.filter")}
+          title={ariaLabel ?? t("actions.filter")}
           className={cn(
             "size-6 rounded-md p-0",
             active ? "text-foreground" : "text-sidebar-foreground/60",
           )}
         >
-          <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />
+          <ListFilter aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
