@@ -84,6 +84,8 @@ jobs:
     needs: validate
     strategy:
       fail-fast: false
+      # 按矩阵顺序优先构建 macOS，再构建 Windows。
+      max-parallel: 1
       matrix: ${{ fromJSON(needs.validate.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
