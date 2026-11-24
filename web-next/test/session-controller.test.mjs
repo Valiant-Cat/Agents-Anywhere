@@ -369,4 +369,49 @@ test("a missing runtime retains the cached model catalog and leaves the session 
   assert.equal(f.sockets[0].closed, undefined)
 })
 
+test("periodic reconciliation recovers missed messages and completion on an open socket", async t => {
+  const f = await fixture(t)
+  await f.subscribe()
+  f.controller.updateState(current => ({ ...current, state: runtimeState(11, "running") }))
+  const item = { id: "reply", sessionId: "a", type: "message", role: "assistant", status: "done", content: { text: "finished" }, source: {}, orderSeq: 12, updatedSeq: 12, revision: 1 }
+  t.mock.method(dashboardApi, "getSessionEvents", async (_token, _id, cursor) => {
+    assert.equal(cursor, "seq:10")
+    return { events: [envelope("timeline.item_created", { item }, 12)], nextCursor: "seq:12", snapshotRequired: false }
+  })
+  t.mock.method(dashboardApi, "getSessionRuntimeState", async () => ({ state: runtimeState(13), serverTime: "now" }))
+  t.mock.timers.tick(15_000)
+  await settle(); await f.flush()
+  assert.equal(f.sockets.length, 1)
+  assert.equal(f.controller.getSnapshot().state.state.status, "idle")
+  assert.equal(f.controller.getSnapshot().state.items[0].id, "reply")
+  assert.equal(f.controller.getSnapshot().state.eventCursor, "seq:12")
+  assert.equal(f.controller.getSnapshot().recovered, true)
+})
+
+test("periodic recovery buffers live traffic and ignores stale runtime reads", async t => {
+  const f = await fixture(t)
+  await f.subscribe()
+  const recovery = deferred(), read = deferred()
+  t.mock.method(dashboardApi, "getSessionEvents", () => recovery.promise)
+  t.mock.method(dashboardApi, "getSessionRuntimeState", () => read.promise)
+  t.mock.timers.tick(15_000); await settle()
+  f.sockets[0].receive("runtime.state.updated", { state: runtimeState(30, "running") }, 30)
+  recovery.resolve({ events: [], nextCursor: "seq:10", snapshotRequired: false })
+  await settle()
+  read.resolve({ state: runtimeState(20), serverTime: "now" })
+  await settle(); await f.flush()
+  assert.equal(f.controller.getSnapshot().state.state.status, "running")
+  assert.equal(f.controller.getSnapshot().state.state.updatedSeq, 30)
+  assert.equal(f.controller.getSnapshot().state.eventCursor, "seq:10")
+})
+
+test("disposing cancels periodic reconciliation", async t => {
+  const f = await fixture(t)
+  await f.subscribe()
+  f.controller.dispose()
+  t.mock.timers.tick(60_000)
+  await settle()
+  assert.equal(f.recoveries.length, 1)
+})
+
 test.after(() => hooks.deregister())

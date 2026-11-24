@@ -154,7 +154,6 @@ function optimisticUserMessageMatchesServerItem(
   if (!isOptimisticTimelineItem(optimisticItem)) return false
   if (optimisticItem.type !== "message" || optimisticItem.role !== "user") return false
   if (serverItem.type !== "message" || serverItem.role !== "user") return false
-  if (optimisticItem.status !== "pending") return false
   const optimisticClientMessageId = timelineClientMessageId(optimisticItem)
   return Boolean(serverClientMessageId && optimisticClientMessageId === serverClientMessageId)
 }

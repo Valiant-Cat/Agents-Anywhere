@@ -948,6 +948,7 @@
       "loadFailed": "Failed to load session.",
       "loadRuntimeSettingsFailed": "Failed to load runtime settings.",
       "sendFailed": "Failed to send message.",
+      "sendConfirmationPending": "发送确认暂未返回，消息可能已执行，正在同步结果。请勿重复发送。",
       "sourceUnavailablePlaceholder": "This session can no longer continue",
       "sourceArchivedTitle": "Session archived in {client}",
       "sourceArchivedDescription": "This session was archived in the local {client} client and cannot continue. Unarchive it to resume the conversation.",

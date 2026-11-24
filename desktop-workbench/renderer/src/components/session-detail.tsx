@@ -27,7 +27,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { createClientId } from "@/lib/id"
-import { isApiError } from "@/lib/api/errors"
+import { ApiError, isApiError } from "@/lib/api/errors"
+import { messageDeliveryIsUncertain, messageWasConfirmed } from "@/components/session/message-delivery"
 import { cn } from "@/lib/utils"
 import { dashboardApi } from "@/features/dashboard/api"
 import type {
@@ -799,6 +800,7 @@ function SessionDetailVisit({
       sessionId: session.id,
       item: optimisticMessage,
     })
+    let requestStarted = false
     let previousRuntimeState = state?.state ?? null
     let pendingRuntimeState: SessionRuntimeState | null = null
     setState((current) => {
@@ -817,15 +819,16 @@ function SessionDetailVisit({
     setSending(true)
     try {
       await selectionChanges.writes.get(session.id)
+      requestStarted = true
       if (delivery === "steer") {
         const response = await dashboardApi.steerSession(token, session.id, messageText, {
           attachments: uploadedAttachments.map((attachment) => ({ fileId: attachment.fileId })),
           clientMessageId,
         })
         // The turn may end just before the message reaches it.
-        const result = response.result as { ok?: unknown; message?: unknown } | null
+        const result = response.result as { ok?: unknown; message?: unknown; code?: string } | null
         if (response.ok === false || result?.ok === false) {
-          throw new Error(typeof result?.message === "string" && result.message ? result.message : tSession("steerFailed"))
+          throw new ApiError({ status: 409, kind: "http", code: result?.code, detail: typeof result?.message === "string" && result.message ? result.message : tSession("steerFailed") })
         }
         return true
       }
@@ -835,6 +838,12 @@ function SessionDetailVisit({
       })
       return true
     } catch (err) {
+      if (requestStarted && messageWasConfirmed(controller.getSnapshot().state?.items ?? [], clientMessageId)) return true
+      if (requestStarted && messageDeliveryIsUncertain(err)) {
+        void controller.reconcile()
+        toast.info(tSession("sendConfirmationPending"))
+        return true
+      }
       const nextSourceErrorCode = sessionSourceErrorCode(err)
       const message = nextSourceErrorCode
         ? sourceErrorMessage(nextSourceErrorCode, tSession, runtimeLabel(sessionRuntimeType(session)))

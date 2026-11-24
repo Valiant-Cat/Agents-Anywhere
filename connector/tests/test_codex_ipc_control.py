@@ -7,6 +7,7 @@ import sys
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -39,6 +40,7 @@ from connector.runtimes.codex.ipc import (
     active_turn_id,
     thread_snapshot_from_conversation_state,
 )
+from connector.runtimes.codex.ipc.client import IpcResponse
 from connector.runtimes.codex.ipc.control import turn_start_request
 from connector.runtimes.codex.runtime import CodexRuntime
 from connector.runtimes.codex.timeline.accumulator import CodexTimelineAccumulator
@@ -269,6 +271,42 @@ async def _wait_for(predicate, timeout: float = 3.0) -> None:
 
 
 # -- controller ----------------------------------------------------------------
+
+@pytest.mark.parametrize("terminal_status", ["idle", "error"])
+def test_late_start_confirmation_preserves_terminal_state(monkeypatch, terminal_status) -> None:
+    async def run() -> None:
+        host = _Host()
+        states = RuntimeSessionStateCache("codex", host)
+        active = {}
+        controller = CodexIpcTurnController(
+            client=SimpleNamespace(),
+            follower=SimpleNamespace(),
+            host=host,
+            session_states=states,
+            active_turn_ids=active,
+            notices=CodexNoticeRegistry(),
+            pending_messages=PendingClientMessageRegistry(connector_id="test"),
+        )
+
+        async def send(self, thread, method, params):
+            await states.update(
+                session_id="s", external_session_id=THREAD,
+                status=terminal_status, metadata={"turn_id": TURN_1},
+            )
+            return IpcResponse(
+                request_id="r", result_type="success",
+                result={"turn": {"id": TURN_1}},
+            )
+
+        monkeypatch.setattr(CodexIpcTurnController, "_send", send)
+        result = await controller.start_turn(
+            "s", FollowedThread(thread_id=THREAD, status="following", state=_state()), "hello",
+        )
+        assert result.ok
+        assert states.get("s").status == terminal_status
+        assert "s" not in active
+
+    asyncio.run(run())
 
 
 def test_controller_drives_owner_for_turns_and_approvals() -> None:

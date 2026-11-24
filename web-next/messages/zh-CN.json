@@ -948,6 +948,7 @@
       "loadFailed": "无法加载会话。",
       "loadRuntimeSettingsFailed": "无法加载运行时设置。",
       "sendFailed": "无法发送消息。",
+      "sendConfirmationPending": "发送确认暂未返回，消息可能已执行，正在同步结果。请勿重复发送。",
       "sourceUnavailablePlaceholder": "当前会话已无法继续对话",
       "sourceArchivedTitle": "会话已在 {client} 中归档",
       "sourceArchivedDescription": "当前会话已在本地 {client} 客户端中归档，无法继续对话。请在该客户端取消归档后继续。",

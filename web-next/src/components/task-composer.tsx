@@ -48,6 +48,7 @@ import { WorkspacePicker, type WorkspaceSelection } from "@/components/workspace
 import { useWorkspace } from "@/components/workspace-context"
 import { useAuth } from "@/components/auth/auth-context"
 import { dashboardApi } from "@/features/dashboard/api"
+import { readCreationCatalog } from "@/components/session/creation-catalog-cache"
 import { createClientId } from "@/lib/id"
 import { sessionTitleFromPrompt } from "@/lib/session-title"
 import { cn } from "@/lib/utils"
@@ -432,13 +433,18 @@ export function TaskComposer() {
     setModelCatalog(null)
     setPermissionCatalog(null)
     setRuntimeCapabilities(null)
-    dashboardApi.getConnectorRuntimeCapabilities(
+    const cacheScope = JSON.stringify([catalogScope, selectedRuntime?.runtimeType, selectedRuntime?.status, runtimeChannel, modelConfig?.profiles, catalogRefreshKey])
+    readCreationCatalog(`${cacheScope}:capabilities`, () => dashboardApi.getConnectorRuntimeCapabilities(
       authSession.accessToken,
       selectedConnectorId,
       selectedAgent,
-    )
+    ))
       .then(async (capabilitiesResponse) => {
         const capabilitySet = capabilitiesResponse.capabilitySet
+        if (cancelled) return
+        setCatalogError(null)
+        setLoadedCatalogScope(catalogScope)
+        setRuntimeCapabilities(capabilitySet)
         const canUseModelCatalog = capabilityIsUsable(
           capabilitySet,
           CAPABILITY.modelCatalog,
@@ -449,31 +455,24 @@ export function TaskComposer() {
           CAPABILITY.permissionCatalog,
           selectedRuntimeScope,
         )
-        const [modelCatalogResponse, permissionCatalogResponse] = await Promise.all([
+        await Promise.allSettled([
           canUseModelCatalog && !findCapability(capabilitySet, "runtime.workspace.prepare", selectedRuntimeScope)?.supported
-            ? dashboardApi.getConnectorRuntimeModelCatalog(
+            ? readCreationCatalog(`${cacheScope}:model`, () => dashboardApi.getConnectorRuntimeModelCatalog(
                 authSession.accessToken,
                 selectedConnectorId,
                 selectedAgent,
-              )
+              )).then(response => { if (!cancelled) setModelCatalog(response.catalog) })
+                .catch(error => { if (!cancelled) setCatalogError({ scope: catalogScope, failure: runtimeFailureOf(error) }) })
             : Promise.resolve(null),
           canUsePermissionCatalog
-            ? dashboardApi.getConnectorRuntimePermissionCatalog(
+            ? readCreationCatalog(`${cacheScope}:permission`, () => dashboardApi.getConnectorRuntimePermissionCatalog(
                 authSession.accessToken,
                 selectedConnectorId,
                 selectedAgent,
-              )
+              )).then(response => { if (!cancelled) setPermissionCatalog(response.catalog) })
+                .catch(error => { if (!cancelled) setCatalogError({ scope: catalogScope, failure: runtimeFailureOf(error) }) })
             : Promise.resolve(null),
         ])
-        return { capabilitySet, modelCatalogResponse, permissionCatalogResponse }
-      })
-      .then(({ capabilitySet, modelCatalogResponse, permissionCatalogResponse }) => {
-        if (cancelled) return
-        setCatalogError(null)
-        setLoadedCatalogScope(catalogScope)
-        setRuntimeCapabilities(capabilitySet)
-        setModelCatalog(modelCatalogResponse?.catalog ?? null)
-        setPermissionCatalog(permissionCatalogResponse?.catalog ?? null)
       })
       .catch((error: unknown) => {
         if (cancelled) return

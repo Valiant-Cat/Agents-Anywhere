@@ -277,6 +277,23 @@ class CodexIpcTurnController:
                 response,
                 result={"externalSessionId": thread.thread_id},
             )
+        cached = self.session_states.get(session_id)
+        # 回应可能晚于同一轮的完成通知，不能把已结束的任务重新置为运行中。
+        if (
+            cached is not None
+            and isinstance(turn_id, str)
+            and cached.metadata.get("turn_id") == turn_id
+            and cached.status in {"idle", "error"}
+        ):
+            return RuntimeOperationResult(
+                ok=True,
+                result={
+                    "started": True,
+                    "externalSessionId": thread.thread_id,
+                    "turnId": turn_id,
+                    "transport": "ipc",
+                },
+            )
         if isinstance(turn_id, str) and turn_id:
             self.active_turn_ids[session_id] = turn_id
         await self.session_states.update(

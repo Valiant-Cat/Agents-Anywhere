@@ -87,6 +87,7 @@ export function createSessionController(options: SessionControllerOptions) {
   let socket: WebSocket | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let recoveryRetryTimer: ReturnType<typeof setTimeout> | null = null
+  let reconciliationTimer: ReturnType<typeof setTimeout> | null = null
   let snapshotReady = options.hasSnapshot
   let connection = 0
   let recoveredConnection = 0
@@ -367,7 +368,7 @@ export function createSessionController(options: SessionControllerOptions) {
     return refetchPromise
   }
 
-  function recoverEvents(): Promise<void> {
+  function recoverEvents(refreshExisting?: boolean): Promise<void> {
     if (recoveryPromise) return recoveryPromise
     if (recoveryStarting) return Promise.resolve()
     if (disposed || snapshot.invalidated || !snapshotReady || !snapshot.subscribed) return Promise.resolve()
@@ -408,7 +409,7 @@ export function createSessionController(options: SessionControllerOptions) {
           previousConsumed = true
           cursor.advance(sessionId, cursorSequence(recovery.nextCursor))
           renderBuffer.flush()
-          refreshRuntime()
+          refreshRuntime(refreshExisting)
           if (snapshot.hasSnapshot) clearError("snapshot")
           recovered = true
         }
@@ -451,6 +452,17 @@ export function createSessionController(options: SessionControllerOptions) {
     if (disposed || snapshot.invalidated || currentConnection !== connection || recoveredConnection === connection)
       return
     await recoverEvents()
+  }
+
+  function scheduleReconciliation() {
+    reconciliationTimer = setTimeout(() => {
+      reconciliationTimer = null
+      if (disposed || snapshot.invalidated) return
+      // 实时连接未断开也可能漏掉完成事件，用持久游标补齐并重读运行状态。
+      void recoverEvents(false).finally(() => {
+        if (!disposed && !snapshot.invalidated) scheduleReconciliation()
+      })
+    }, 15_000)
   }
 
   async function connect() {
@@ -511,6 +523,7 @@ export function createSessionController(options: SessionControllerOptions) {
       }
     },
     updateState,
+    reconcile: () => recoverEvents(false),
     invalidateAccess(error: unknown): boolean {
       if (!isApiError(error) || (error.status !== 403 && error.status !== 404)) return false
       recordError("access", error)
@@ -522,6 +535,7 @@ export function createSessionController(options: SessionControllerOptions) {
     start() {
       if (started || disposed) return
       started = true
+      scheduleReconciliation()
       void connect()
       if (!snapshotReady)
         void loadInitialSessionState(token, sessionId)
@@ -546,6 +560,7 @@ export function createSessionController(options: SessionControllerOptions) {
       listeners.clear()
       if (reconnectTimer !== null) clearTimeout(reconnectTimer)
       if (recoveryRetryTimer !== null) clearTimeout(recoveryRetryTimer)
+      if (reconciliationTimer !== null) clearTimeout(reconciliationTimer)
       socket?.close()
     },
   }
