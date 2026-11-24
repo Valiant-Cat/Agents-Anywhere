@@ -262,6 +262,7 @@
       "copyFailed": "Copy failed",
       "copySessionId": "Copy Session ID",
       "expand": "Expand sidebar",
+      "more": "More",
       "markAllRead": "Mark all read",
       "filter": "Filter recents",
       "showMoreSessions": "Show {count} more",

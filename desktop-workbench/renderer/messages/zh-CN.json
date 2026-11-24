@@ -318,6 +318,7 @@
       "copyFailed": "复制失败",
       "copySessionId": "复制会话 ID",
       "expand": "展开侧栏",
+      "more": "更多",
       "markAllRead": "全部标为已读",
       "filter": "过滤最近会话",
       "showMoreSessions": "显示其余 {count} 个会话",

@@ -2,7 +2,7 @@
 
 import { MoreHorizontal, Plus } from "lucide-react"
 import * as React from "react"
-import { SessionFilterMenu } from "@/components/session-filter-menu"
+import { SessionFilterMenuItems } from "@/components/session-filter-menu"
 import { ProjectSidebarItem } from "@/components/sidebar/project-sidebar-item"
 import { SidebarLoadingItem } from "@/components/sidebar/sidebar-loading-item"
 import { SidebarSectionTrigger } from "@/components/sidebar/sidebar-section-trigger"
@@ -22,6 +22,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -132,25 +133,26 @@ export function ProjectsSection({
         >
           <div className="flex min-w-0 items-center gap-1">
             <SidebarSectionTrigger label={t("sections.projects")} expanded={expanded} />
-            <SessionFilterMenu ariaLabel={t("filters.deviceAgentAria")} />
           </div>
           <div className="flex items-center gap-0.5">
             <DropdownMenu open={filterOpen} onOpenChange={setFilterOpen}>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  aria-label={t("projects.filterSessions")}
+                  aria-label={t("actions.more")}
+                  title={t("actions.more")}
                   className={cn(
-                    "rounded p-0.5 text-muted-foreground opacity-0 transition-[color,background-color,opacity]",
+                    "shrink-0 rounded p-0.5 text-muted-foreground transition-colors",
                     "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                    "group-hover/projects-label:opacity-100",
                     filterOpen && "bg-sidebar-accent text-sidebar-accent-foreground opacity-100",
                   )}
                 >
                   <MoreHorizontal className="size-3.5" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="right" className="w-56">
+              <DropdownMenuContent align="end" className="w-56">
+                <SessionFilterMenuItems />
+                <DropdownMenuSeparator />
                 <DropdownMenuLabel className="text-xs text-muted-foreground">
                   {t("projects.sessionStatus")}
                 </DropdownMenuLabel>

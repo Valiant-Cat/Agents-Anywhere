@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { CheckCheck } from "lucide-react"
 import { SessionFilterMenu } from "@/components/session-filter-menu"
 import { SessionSidebarItem } from "@/components/sidebar/session-sidebar-item"
 import { SidebarLoadingItem } from "@/components/sidebar/sidebar-loading-item"
@@ -63,15 +62,7 @@ export function RecentSessionsSection({
           aria-level={2}
         >
           <SidebarSectionTrigger label={label ?? t("sections.recents")} expanded={expanded} />
-          <SessionFilterMenu />
-          <button
-            type="button"
-            aria-label={t("actions.markAllRead")}
-            onClick={() => void onMarkAllRead()}
-            className="ml-auto shrink-0 rounded-md p-0.5 text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          >
-            <CheckCheck className="size-3.5" />
-          </button>
+          <SessionFilterMenu className="ml-auto shrink-0" onMarkAllRead={onMarkAllRead} />
         </SidebarGroupLabel>
         <CollapsibleContent>
           <SidebarGroupContent>
