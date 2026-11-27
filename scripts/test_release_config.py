@@ -26,6 +26,16 @@ class ReleaseConfigTest(unittest.TestCase):
         self.assertIn("ref: ${{ inputs.commit || github.sha }}", ios)
         self.assertIn("github.run_attempt", ios)
 
+    def test_android_sdk_avoids_removed_tools_package(self):
+        root = Path(__file__).resolve().parents[1]
+        android = (root / ".github/workflows/android-release.yml").read_text()
+        sdk_setup = android.split(
+            "- uses: android-actions/setup-android@v3\n", 1)[1].split(
+            "- uses:", 1)[0]
+        self.assertIn("packages: platform-tools", sdk_setup)
+        self.assertNotIn("packages: tools", sdk_setup)
+        self.assertIn("log-accepted-android-sdk-licenses: false", sdk_setup)
+
     def test_self_hosted_version(self):
         values = release.release_config("v2.2.0.3", "2.2.0.3")
         self.assertEqual(values["RELEASE_PACKAGE_VERSION"], "2.2.10003")
