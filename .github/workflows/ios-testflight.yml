@@ -1,0 +1,68 @@
+name: iOS TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: 签名并上传到 App Store Connect（默认仅编译）
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-testflight-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      CLOUD_SERVER_URL: ${{ vars.CLOUD_SERVER_URL }}
+      IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
+      IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
+      IOS_BUILD_NUMBER: ${{ github.run_number }}
+      IOS_UPLOAD: ${{ inputs.upload }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 记录工具链与源码
+        run: |
+          git rev-parse HEAD
+          xcodebuild -version
+          xcodebuild -showsdks
+      - name: 配置签名材料
+        if: inputs.upload
+        env:
+          IOS_CERTIFICATE_P12: ${{ secrets.IOS_CERTIFICATE_P12 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROFILE: ${{ secrets.IOS_PROFILE }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: python3 ios/scripts/testflight-build.py prepare-signing
+      - name: 编译与测试
+        run: |
+          swift test --package-path ios
+          python3 ios/scripts/testflight-build.py build
+      - name: 上传构建
+        if: inputs.upload
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: python3 ios/scripts/testflight-build.py upload
+      - name: 保存构建记录
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-${{ github.sha }}-${{ github.run_number }}
+          path: |
+            ${{ runner.temp }}/aa-ios/export/*.ipa
+            ${{ runner.temp }}/aa-ios/build-record.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: 清理签名材料
+        if: always() && inputs.upload
+        run: python3 ios/scripts/testflight-build.py cleanup

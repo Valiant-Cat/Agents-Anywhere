@@ -12,7 +12,7 @@ struct ManualLoginView: View {
     @State private var alertMessage: String?
     @State private var alertTitle = String(localized: "Sign In Failed")
 
-    static let cloudServer = "https://web.agents-anywhere.com"
+    static let cloudServer = CloudDeployment.serverURL.absoluteString
 
     var onDashboardRequested: () -> Void = {}
 
