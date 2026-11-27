@@ -1367,7 +1367,10 @@ function SessionDetailVisit({
               <NotificationCard key={notice.noticeId} notice={notice} />
             ))}
             {!creationFailed && (runtimeStatus === "waiting" || runtimeStatus === "pending" || runtimeStatus === "running") ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className={cn(
+                "items-center gap-2 text-sm text-muted-foreground",
+                runtimeStatus === "running" ? "flex" : "hidden md:flex",
+              )}>
                 <Loader2 className="size-4 animate-spin" />
                 <span>
                   {runtimeStatus === "waiting" || runtimeStatus === "pending"

@@ -1,16 +1,18 @@
 # 自部署自动发布
 
-推送正式版本标签（如 `v2.2.3`）时，「自部署桌面发布」先构建 macOS 通用包和 Windows x64 安装包，两个平台均成功后创建正式 GitHub Release，再调用「自部署服务器」构建 Linux 镜像并部署。普通分支 push 不部署，预发布标签不部署。标签提交必须属于 `self-hosted-2.2.0` 分支，否则校验失败。
+推送正式版本标签（如 `v2.2.0.3`）时，「自部署全平台发布」校验标签和移动端签名配置，再从同一提交构建 macOS、Windows、Android 并上传 iOS 到 TestFlight。桌面矩阵仍先 Mac 后 Windows，移动端可以同时构建。所有平台成功后才发布包含 DMG、EXE、APK 和校验文件的 GitHub Release，再部署 Web 和后端。普通分支 push 不部署，预发布标签不部署。标签提交必须属于 `self-hosted-2.2.0` 分支，否则校验失败。
 也可在 Actions 手动运行「自部署服务器」，必须选择正式版本标签，不能选择分支。
 
 ```sh
 git switch self-hosted-2.2.0
 # 先按版本规则更新各端版本与发布说明，提交并推送后再发布标签。
-git tag -a v2.2.1 -m "发布 v2.2.1"
-git push origin v2.2.1
+git tag -a v2.2.0.3 -m "发布 v2.2.0.3"
+git push origin v2.2.0.3
 ```
 
-标签指向的提交必须已经包含自动部署工作流；不要移动或覆盖已发布标签。推送标签本身不自动修改源码版本号，必须在打标签前更新版本配置；标签必须与 Server 的版本一致，否则停止部署。
+标签指向的提交必须已经包含自动部署工作流；不要移动或覆盖已发布标签。标签必须与 Server 的版本一致；桌面、Android、iOS 构建时从标签注入版本，不改写这些端的源码版本文件。四段 `2.2.0.N` 映射为系统三段 `2.2.(10000+N)`；Android 保留四段显示版本，安装编号由版本确定，不使用不同工作流的运行序号。
+
+在 Actions 手动运行「自部署全平台发布」并指定新正式标签，也会运行完整发布及部署。不能重发已有正式 Release；失败时在草稿发布前可以重跑。iOS 上传属于独立外部操作，后续平台失败不会撤回已上传的构建；重跑使用新的 iOS 构建号。上传成功只代表 Apple 接收，不代表处理完成、审核通过或公开邀请已开放。
 
 ## 首次配置
 
@@ -47,15 +49,27 @@ git push origin v2.2.1
 - `CLOUD_OAUTH_WEB_ORIGIN`：可选，默认同服务地址。
 - `DESKTOP_UPDATE_MAC_URL`、`DESKTOP_UPDATE_WINDOWS_URL`：可选，默认分别为服务地址下的 `/download/mac/latest?from=update` 和 `/download/windows/latest?from=update`。
 
-流水线使用 Node 22 和现有打包脚本，核验包内服务地址、更新地址和版本，上传两个固定名称的附件及 SHA-256 文件；全部上传完成前 Release 保持草稿。Desktop 安装包版本临时取标签版本，不回写源码；更新比较基线仍来自该标签的 Server 版本。
+流水线使用 Node 22 和现有打包脚本，核验包内服务地址、更新地址和版本；全部附件上传完成前 Release 保持草稿。Desktop 安装包版本临时取标签版本，不回写源码；更新比较基线仍来自该标签的 Server 版本。
 
 签名是可选的，凭据必须放在仓库 Actions Secrets：macOS 使用 `MAC_CERT_P12_BASE64`、`MACOS_SIGN_IDENTITY`、`CSC_KEY_PASSWORD`，Apple 公证使用 `APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`；Windows 使用 `WIN_CERT_P12_BASE64`、`WIN_CSC_KEY_PASSWORD`。不配置时构建未签名、未公证包，系统可能阻止启动，不能当作已签名正式发行包；不完整的凭据会使构建失败。流水线检查不代替真实安装和 OAuth 验证。
 
-首次补包：在 `self-hosted-2.2.0` 分支推送本桌面工作流、桌面 `package.json` 或通用包回归测试的变更，也会触发构建，自动读取 Server 版本并检出同名既有标签；仅补安装包，不部署 Server、不移动标签。已发布的正式 Release 不允许覆盖；失败后可以重跑草稿发布。不要手动把无附件 Release 设置为 Latest。
+旧的跨提交 Mac 补包分支已移除，避免安装包源码与标签不一致。不要手动把无附件 Release 设置为 Latest。
 
-如果正式 Release 已包含 Windows 安装包及校验文件、但完全缺少 Mac 附件，分支触发会只构建 Mac 通用包，并追加两个缺失附件，绝不替换 Windows 文件。业务源码仍检出版本标签，只从触发提交应用 `x64ArchFiles` 打包规则及回归测试；发布说明记录业务与打包修复两个提交。其他缺包状态停止处理，需要人工核查。
+### Android 配置
 
-手动触发要求仓库默认分支也包含本工作流；满足这个条件后，已有标签可在「自部署桌面发布」选择 `self-hosted-2.2.0` 分支，填写 `release_tag` 后手动补包，不再次部署 Server。
+仓库 Secrets 必须设置 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。必须使用自己长期保管的正式密钥；已分发 APK 的更新必须沿用原密钥，不能为通过构建临时生成替代密钥。Android 工作流运行在 Linux 隔离 Runner，使用 JDK 17，执行 Release 单测、构建、签名核验和包版本核验。
+
+默认服务地址使用仓库 Variable `CLOUD_SERVER_URL`，更新地址使用该地址下的 `/download/android/latest?from=update`。附件名为 `Agents-Anywhere-latest.apk` 和同名 `.sha256`；Server 必须包含对应 Android 下载路由。
+
+### iOS 配置
+
+仓库 Variables：`IOS_TEAM_ID`、`IOS_BUNDLE_ID`、`CLOUD_SERVER_URL`。
+仓库 Secrets：`IOS_CERTIFICATE_P12`、`IOS_CERTIFICATE_PASSWORD`、`IOS_PROFILE`、`ASC_PRIVATE_KEY`、`ASC_KEY_ID`、`ASC_ISSUER_ID`。
+使用现有 TestFlight 签名上传脚本，正式标签注入 `MARKETING_VERSION`，构建号使用运行序号和重跑序号。`ios-testflight-*` 和手动入口仍可单独上传，`ios-check-*` 仍只编译。
+
+流水线不会自动提交外部 Beta 审核、添加测试员或开启公开邀请。审核通过后，将自己的邀请链接设置为 `NEXT_PUBLIC_IOS_TESTFLIGHT_URL`，重新部署 Web 才会更新下载页；不能使用上游的 TestFlight 邀请。
+
+本流水线不是跨服务原子事务：GitHub Release 发布成功后若部署失败，安装包仍已公开，需要修复部署后重跑失败任务。发布号不得回退；数据库迁移的恢复限制见上文。
 
 ## 手动运维
 

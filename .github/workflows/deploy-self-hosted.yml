@@ -51,8 +51,15 @@ jobs:
               raise SystemExit("标签与 Server 版本不一致，停止部署")
           PY
       - name: 构建部署镜像
+        env:
+          NEXT_PUBLIC_IOS_TESTFLIGHT_URL: ${{ vars.NEXT_PUBLIC_IOS_TESTFLIGHT_URL }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
-          docker build -f docker/Dockerfile -t "agents-anywhere-deploy:$RELEASE_COMMIT" .
+          export RELEASE_PACKAGE_VERSION="$(python3 scripts/release-config.py "$RELEASE_TAG" | python3 -c 'import json,sys; print(json.load(sys.stdin)["RELEASE_PACKAGE_VERSION"])')"
+          docker build -f docker/Dockerfile \
+            --build-arg RELEASE_PACKAGE_VERSION \
+            --build-arg NEXT_PUBLIC_IOS_TESTFLIGHT_URL \
+            -t "agents-anywhere-deploy:$RELEASE_COMMIT" .
           docker save "agents-anywhere-deploy:$RELEASE_COMMIT" | gzip > image.tar.gz
           sha256sum image.tar.gz > image.tar.gz.sha256
       - name: 配置专用 SSH 密钥

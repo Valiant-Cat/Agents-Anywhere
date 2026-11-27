@@ -1,0 +1,78 @@
+name: Android 正式安装包
+
+on:
+  workflow_call:
+    inputs:
+      commit:
+        required: true
+        type: string
+      release_tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CLOUD_SERVER_URL: ${{ vars.CLOUD_SERVER_URL }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 配置版本与签名
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/aa-android-release.jks" >> "$GITHUB_ENV"
+          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/aa-android-release.jks"
+          python3 scripts/release-config.py "$RELEASE_TAG" --github-env
+          python3 - <<'PY'
+          import base64, os
+          from pathlib import Path
+          path = Path(os.environ["ANDROID_KEYSTORE_PATH"])
+          path.write_bytes(base64.b64decode(os.environ["ANDROID_KEYSTORE_BASE64"], validate=True))
+          path.chmod(0o600)
+          PY
+      - name: 测试与构建正式 APK
+        working-directory: android
+        run: bash gradlew --no-daemon testReleaseUnitTest assembleRelease
+      - name: 核验签名和安装包版本
+        run: |
+          tools="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          "$tools/apksigner" verify --verbose --print-certs "$apk"
+          "$tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/android-badging.txt"
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          text = (Path(os.environ["RUNNER_TEMP"]) / "android-badging.txt").read_text()
+          assert re.search(r"versionCode='" + re.escape(os.environ["ANDROID_VERSION_CODE"]) + "'", text)
+          assert re.search(r"versionName='" + re.escape(os.environ["ANDROID_VERSION_NAME"]) + "'", text)
+          PY
+          mkdir -p release-assets
+          cp "$apk" release-assets/Agents-Anywhere-latest.apk
+          cd release-assets
+          sha256sum Agents-Anywhere-latest.apk > Agents-Anywhere-latest.apk.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+      - name: 清理签名文件
+        if: always()
+        run: rm -f "$ANDROID_KEYSTORE_PATH"

@@ -1,11 +1,14 @@
 FROM node:22-bookworm-slim AS web-static
 
 ARG YARN_REGISTRY=
+ARG RELEASE_PACKAGE_VERSION=
+ARG NEXT_PUBLIC_IOS_TESTFLIGHT_URL=
 
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     NEXT_OUTPUT=export \
-    AGENTS_ANYWHERE_API=
+    AGENTS_ANYWHERE_API= \
+    NEXT_PUBLIC_IOS_TESTFLIGHT_URL=$NEXT_PUBLIC_IOS_TESTFLIGHT_URL
 
 WORKDIR /app/web-next
 
@@ -15,7 +18,10 @@ RUN corepack enable \
     && YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install
 
 COPY web-next ./
-RUN yarn build
+RUN if [ -n "$RELEASE_PACKAGE_VERSION" ]; then \
+      node -e 'const fs=require("fs"); const p=require("./package.json"); p.version=process.env.RELEASE_PACKAGE_VERSION; fs.writeFileSync("package.json", JSON.stringify(p,null,2)+"\n")'; \
+    fi \
+    && yarn build
 
 
 FROM python:3.12-slim AS server

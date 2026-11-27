@@ -1,6 +1,17 @@
 name: iOS TestFlight
 
 on:
+  workflow_call:
+    inputs:
+      commit:
+        required: true
+        type: string
+      release_tag:
+        required: true
+        type: string
+      upload:
+        type: boolean
+        default: false
   push:
     tags:
       - 'ios-check-*'
@@ -16,7 +27,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ios-testflight-${{ github.ref }}
+  group: ios-testflight-${{ inputs.commit || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -28,10 +39,17 @@ jobs:
       CLOUD_SERVER_URL: ${{ vars.CLOUD_SERVER_URL }}
       IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
       IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
-      IOS_BUILD_NUMBER: ${{ github.run_number }}
+      IOS_BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
       IOS_UPLOAD: ${{ inputs.upload == true || startsWith(github.ref, 'refs/tags/ios-testflight-') }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+      - name: 注入统一发布版本
+        if: inputs.release_tag != ''
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: python3 scripts/release-config.py "$RELEASE_TAG" --github-env
       - name: 记录工具链与源码
         run: |
           git rev-parse HEAD

@@ -38,9 +38,12 @@ const nextConfig: NextConfig = {
           const namespace = normalizeApiNamespace(apiNamespace);
           if (namespace) {
             const source = `${namespace}/:path*`;
-            return [{ source, destination: `${apiTarget}${source}` }];
+            return [
+              { source, destination: `${apiTarget}${source}` },
+              { source: "/download/:path*", destination: `${apiTarget}/download/:path*` },
+            ];
           }
-          return apiRoutePrefixes.map((prefix) => ({
+          return [...apiRoutePrefixes, "/download"].map((prefix) => ({
             source: `${prefix}/:path*`,
             destination: `${apiTarget}${prefix}/:path*`
           }));

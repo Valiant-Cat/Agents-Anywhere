@@ -12,8 +12,8 @@ export const PRODUCT_LINKS: {
   tokensAnywhereUrl: process.env.NEXT_PUBLIC_TOKENS_ANYWHERE_URL ?? '',
   desktopDownloadUrl: '',
   landingPageUrl: '',
-  downloadPageUrl: 'https://agents-anywhere.com/download',
-  androidDownloadUrl: 'https://github.com/anywhere-labs/Agents-Anywhere/releases/latest',
+  downloadPageUrl: '/downloads/',
+  androidDownloadUrl: '/download/android/latest?from=web',
   iosDownloadUrl: '',
   webAppHref: '#/',
 }

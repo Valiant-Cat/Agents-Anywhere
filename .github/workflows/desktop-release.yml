@@ -1,4 +1,4 @@
-name: 自部署桌面发布
+name: 自部署全平台发布
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 要构建的现有正式版本标签，例如 v2.2.2
+        description: 要发布的正式版本标签，例如 v2.2.0.3
         required: true
         type: string
 
@@ -24,7 +24,6 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       commit: ${{ steps.version.outputs.commit }}
-      repair: ${{ steps.version.outputs.repair }}
       matrix: ${{ steps.version.outputs.matrix }}
     steps:
       - name: 检出发布源码
@@ -39,6 +38,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          python3 -m unittest discover -s scripts -p 'test_release_config.py'
           if [[ -z "$RELEASE_TAG" ]]; then
             RELEASE_TAG=$(python3 -c 'import tomllib; print("v" + tomllib.load(open("server/pyproject.toml", "rb"))["project"]["version"])')
           fi
@@ -56,29 +56,47 @@ jobs:
           if os.environ["RELEASE_TAG"] != f"v{version}":
               raise SystemExit("标签与 Server 版本不一致")
           PY
-          REPAIR=false
-          # 仅分支补包允许向已有正式版本追加缺失的 Mac 包，不替换附件。
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,assets > release.json; then
-            if python3 -c 'import json; assert not json.load(open("release.json"))["isDraft"]'; then
-              test "$GITHUB_REF" = refs/heads/self-hosted-2.2.0
-              python3 - <<'PY'
-          import json
-          names = {asset["name"] for asset in json.load(open("release.json"))["assets"]}
-          assert {"Agents-Anywhere-Setup-latest.exe", "Agents-Anywhere-Setup-latest.exe.sha256"} <= names
-          assert not {"Agents-Anywhere-latest.dmg", "Agents-Anywhere-latest.dmg.sha256"} & names
-          PY
-              REPAIR=true
-            fi
+            python3 -c 'import json; assert json.load(open("release.json"))["isDraft"], "不覆盖正式 Release，请递增版本"'
           fi
-          echo "repair=$REPAIR" >> "$GITHUB_OUTPUT"
-          if [[ "$REPAIR" = true ]]; then
-            echo 'matrix={"include":[{"os":"macos-15","platform":"mac","arch":"universal","extension":"dmg","asset":"Agents-Anywhere-latest.dmg"}]}' >> "$GITHUB_OUTPUT"
-          else
-            echo 'matrix={"include":[{"os":"macos-15","platform":"mac","arch":"universal","extension":"dmg","asset":"Agents-Anywhere-latest.dmg"},{"os":"windows-latest","platform":"win","arch":"x64","extension":"exe","asset":"Agents-Anywhere-Setup-latest.exe"}]}' >> "$GITHUB_OUTPUT"
-          fi
+          python3 scripts/release-config.py "$RELEASE_TAG"
+          echo 'matrix={"include":[{"os":"macos-15","platform":"mac","arch":"universal","extension":"dmg","asset":"Agents-Anywhere-latest.dmg"},{"os":"windows-latest","platform":"win","arch":"x64","extension":"exe","asset":"Agents-Anywhere-Setup-latest.exe"}]}' >> "$GITHUB_OUTPUT"
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: 检查移动端签名配置
+        env:
+          CLOUD_SERVER_URL: ${{ vars.CLOUD_SERVER_URL }}
+          IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
+          IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
+          IOS_CERTIFICATE_P12: ${{ secrets.IOS_CERTIFICATE_P12 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROFILE: ${{ secrets.IOS_PROFILE }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: python3 scripts/release-config.py --check-secrets
+
+  android:
+    needs: validate
+    uses: ./.github/workflows/android-release.yml
+    with:
+      commit: ${{ needs.validate.outputs.commit }}
+      release_tag: ${{ needs.validate.outputs.tag }}
+    secrets: inherit
+
+  ios:
+    needs: validate
+    uses: ./.github/workflows/ios-testflight.yml
+    with:
+      commit: ${{ needs.validate.outputs.commit }}
+      release_tag: ${{ needs.validate.outputs.tag }}
+      upload: true
+    secrets: inherit
 
   build:
     needs: validate
@@ -104,21 +122,6 @@ jobs:
         with:
           ref: ${{ needs.validate.outputs.commit }}
           fetch-depth: 0
-      - name: 应用通用包合并规则修复
-        if: needs.validate.outputs.repair == 'true'
-        env:
-          PACKAGING_COMMIT: ${{ github.sha }}
-        run: |
-          node --input-type=module <<'JS'
-          import { execFileSync } from "node:child_process";
-          import { readFileSync, writeFileSync } from "node:fs";
-          const fixed = JSON.parse(execFileSync("git", ["show", `${process.env.PACKAGING_COMMIT}:desktop-workbench/package.json`], { encoding: "utf8" }));
-          const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-          // 业务源码仍来自版本标签，只应用本次修复的打包白名单。
-          pkg.build.mac.x64ArchFiles = fixed.build.mac.x64ArchFiles;
-          writeFileSync("package.json", `${JSON.stringify(pkg, null, 2)}\n`);
-          writeFileSync("scripts/mac-universal.test.mjs", execFileSync("git", ["show", `${process.env.PACKAGING_COMMIT}:desktop-workbench/scripts/mac-universal.test.mjs`]));
-          JS
       - name: 安装桌面依赖
         uses: ./.github/actions/setup-yarn
         with:
@@ -209,19 +212,23 @@ jobs:
           retention-days: 7
 
   publish:
-    needs: [validate, build]
+    needs: [validate, build, android, ios]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: 下载两个平台安装包
+      - name: 下载桌面安装包
         uses: actions/download-artifact@v4
         with:
           pattern: desktop-*
           merge-multiple: true
           path: assets
+      - name: 下载 Android 安装包
+        uses: actions/download-artifact@v4
+        with:
+          name: android-release
+          path: assets
       - name: 校验并发布正式 Release
-        if: needs.validate.outputs.repair != 'true'
         working-directory: assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -233,8 +240,9 @@ jobs:
         run: |
           test -s Agents-Anywhere-latest.dmg
           test -s Agents-Anywhere-Setup-latest.exe
+          test -s Agents-Anywhere-latest.apk
           sha256sum -c ./*.sha256
-          printf 'macOS：通用包（Apple Silicon / Intel）；Windows：x64。\n\n签名凭据已配置：macOS=%s，Apple 公证=%s，Windows=%s。\n未配置签名或公证的平台可能被系统拦截，不代表已经通过真实安装验证。\n\n源码提交：%s\n' \
+          printf 'macOS：通用包（Apple Silicon / Intel）；Windows：x64；Android：已签名 APK；iOS / iPadOS：已上传 TestFlight，处理及外部审核状态请在 App Store Connect 查看，不代表已开放公开下载。\n\n签名凭据已配置：macOS=%s，Apple 公证=%s，Windows=%s。\n未配置签名或公证的平台可能被系统拦截，不代表已经通过真实安装验证。\n\n源码提交：%s\n' \
             "$MAC_SIGNED" "$MAC_NOTARIZED" "$WIN_SIGNED" "$RELEASE_COMMIT" > notes.md
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft > release.json; then
             python3 -c 'import json; assert json.load(open("release.json"))["isDraft"], "不覆盖正式 Release"'
@@ -244,28 +252,11 @@ jobs:
           fi
           gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
             Agents-Anywhere-latest.dmg Agents-Anywhere-latest.dmg.sha256 \
-            Agents-Anywhere-Setup-latest.exe Agents-Anywhere-Setup-latest.exe.sha256
+            Agents-Anywhere-Setup-latest.exe Agents-Anywhere-Setup-latest.exe.sha256 \
+            Agents-Anywhere-latest.apk Agents-Anywhere-latest.apk.sha256
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest --notes-file notes.md
-      - name: 追加缺失的 Mac 安装包
-        if: needs.validate.outputs.repair == 'true'
-        working-directory: assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-          RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
-          PACKAGING_COMMIT: ${{ github.sha }}
-        run: |
-          test -s Agents-Anywhere-latest.dmg
-          sha256sum -c Agents-Anywhere-latest.dmg.sha256
-          # 不使用 --clobber，绝不替换任何已发布文件。
-          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            Agents-Anywhere-latest.dmg Agents-Anywhere-latest.dmg.sha256
-          printf 'Windows x64；macOS 通用包（Apple Silicon / Intel）。\n\n安装包未签名、未公证，尚未进行真实安装验证。\n\n业务源码：%s\nmacOS 打包规则修复：%s\nWindows 包保持原发布附件不变。\n' \
-            "$RELEASE_COMMIT" "$PACKAGING_COMMIT" > notes.md
-          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
 
   deploy:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [validate, publish]
     uses: ./.github/workflows/deploy-self-hosted.yml
     with:

@@ -1,3 +1,5 @@
+import { getDesktopServerConnection } from "@/features/desktop/server-connection"
+
 /** Fixed product configuration. Empty URLs remain visibly unavailable. */
 export const PRODUCT_LINKS: {
   tokensAnywhereUrl: string
@@ -12,8 +14,11 @@ export const PRODUCT_LINKS: {
   tokensAnywhereUrl: process.env.NEXT_PUBLIC_TOKENS_ANYWHERE_URL ?? '',
   desktopDownloadUrl: '',
   landingPageUrl: '',
-  downloadPageUrl: 'https://agents-anywhere.com/download',
-  androidDownloadUrl: 'https://github.com/anywhere-labs/Agents-Anywhere/releases/latest',
+  get downloadPageUrl() {
+    const origin = getDesktopServerConnection()?.serverUrl || process.env.NEXT_PUBLIC_AGENTS_ANYWHERE_API
+    return origin ? new URL("/downloads/", origin).href : ""
+  },
+  androidDownloadUrl: '',
   iosDownloadUrl: '',
   webAppHref: '#/',
 }

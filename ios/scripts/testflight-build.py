@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import secrets
 import shlex
 import shutil
@@ -84,11 +85,13 @@ def build():
         raise ValueError("CLOUD_SERVER_URL 必须是无认证信息的 HTTPS 服务源地址")
     upload = os.environ.get("IOS_UPLOAD") == "true"
     number = required("IOS_BUILD_NUMBER")
-    if not number.isdecimal() or int(number) < 1:
-        raise ValueError("IOS_BUILD_NUMBER 必须是正整数")
+    if not re.fullmatch(r"[1-9]\d{0,3}(?:\.\d{1,2}){0,2}", number):
+        raise ValueError("IOS_BUILD_NUMBER 必须符合 Apple 构建号格式")
     sha = run("git", "rev-parse", "HEAD", cwd=ROOT, capture_output=True, text=True).stdout.strip()
     (WORK / "build-record.json").write_text(json.dumps({
         "commit": sha, "build": number, "upload_requested": upload,
+        "release_version": os.environ.get("RELEASE_VERSION"),
+        "package_version": os.environ.get("RELEASE_PACKAGE_VERSION"),
         "runner": os.environ.get("ImageVersion"),
         "xcode": run("xcodebuild", "-version", capture_output=True, text=True).stdout,
     }, ensure_ascii=False, indent=2))
@@ -99,6 +102,11 @@ def build():
         f"CLOUD_SERVER_URL={origin}", f"CURRENT_PROJECT_VERSION={number}",
         "SUPPORTS_MACCATALYST=NO", "TARGETED_DEVICE_FAMILY=1,2",
     ]
+    version = os.environ.get("RELEASE_PACKAGE_VERSION")
+    if version:
+        if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+            raise ValueError("RELEASE_PACKAGE_VERSION 必须是三段版本")
+        args.append(f"MARKETING_VERSION={version}")
     if not upload:
         run(*args, "CODE_SIGNING_ALLOWED=NO", "build")
         return

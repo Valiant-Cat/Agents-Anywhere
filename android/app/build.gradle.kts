@@ -6,7 +6,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-val officialServerUrl = "https://web.agents-anywhere.com"
+val officialServerUrl = providers.environmentVariable("CLOUD_SERVER_URL")
+    .orElse("https://web.agents-anywhere.com").get().trimEnd('/')
 val localSettings = Properties().apply {
     rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
 }
@@ -27,13 +28,30 @@ android {
         applicationId = "com.agentsanywhere.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "2.2.0.1"
+        versionCode = providers.environmentVariable("ANDROID_VERSION_CODE").orNull?.toInt() ?: 12
+        versionName = providers.environmentVariable("ANDROID_VERSION_NAME").orNull ?: "2.2.0.1"
         buildConfigField("String", "OFFICIAL_SERVER_URL", officialServerUrl.asBuildConfigString())
+        buildConfigField("String", "UPDATE_DOWNLOAD_URL",
+            (providers.environmentVariable("ANDROID_UPDATE_DOWNLOAD_URL").orNull
+                ?: if (providers.environmentVariable("CLOUD_SERVER_URL").isPresent)
+                    "$officialServerUrl/download/android/latest?from=update"
+                else "https://www.agents-anywhere.com/api/download/android/latest?from=update")
+                .asBuildConfigString())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         vectorDrawables {
             useSupportLibrary = true
+        }
+    }
+
+    signingConfigs {
+        if (providers.environmentVariable("ANDROID_KEYSTORE_PATH").isPresent) {
+            create("release") {
+                storeFile = file(providers.environmentVariable("ANDROID_KEYSTORE_PATH").get())
+                storePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").get()
+            }
         }
     }
 
@@ -42,6 +60,7 @@ android {
             buildConfigField("String", "OFFICIAL_SERVER_URL", debugServerUrl.asBuildConfigString())
         }
         release {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

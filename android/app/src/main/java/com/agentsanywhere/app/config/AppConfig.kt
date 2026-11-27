@@ -8,7 +8,7 @@ object AppConfig {
     val OFFICIAL_SERVER_URL: String = BuildConfig.OFFICIAL_SERVER_URL
     const val DESKTOP_DOWNLOAD_URL = "https://agents-anywhere.com/download"
     // The official site redirects this to the latest release APK.
-    const val UPDATE_DOWNLOAD_URL = "https://www.agents-anywhere.com/api/download/android/latest?from=update"
+    val UPDATE_DOWNLOAD_URL: String = BuildConfig.UPDATE_DOWNLOAD_URL
 
     fun isOfficialServer(serverUrl: String): Boolean {
         val officialOrigin = normalizeServerOrigin(OFFICIAL_SERVER_URL) ?: return false

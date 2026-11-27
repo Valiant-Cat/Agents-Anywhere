@@ -15,7 +15,11 @@ def make_client(repository: str | None = "Valiant-Cat/Agents-Anywhere") -> TestC
 
 @pytest.mark.parametrize(
     "platform,filename",
-    [("mac", "Agents-Anywhere-latest.dmg"), ("windows", "Agents-Anywhere-Setup-latest.exe")],
+    [
+        ("mac", "Agents-Anywhere-latest.dmg"),
+        ("windows", "Agents-Anywhere-Setup-latest.exe"),
+        ("android", "Agents-Anywhere-latest.apk"),
+    ],
 )
 @pytest.mark.parametrize("method", ["GET", "HEAD"])
 def test_release_redirect(platform, filename, method) -> None:
@@ -37,7 +41,8 @@ def test_release_redirect(platform, filename, method) -> None:
 def test_disabled_downloads(repository) -> None:
     client = make_client(repository)
     for method in (client.get, client.head):
-        assert method("/download/mac/latest").status_code == 404
+        for platform in ("mac", "windows", "android"):
+            assert method(f"/download/{platform}/latest").status_code == 404
 
 
 @pytest.mark.parametrize(
@@ -76,5 +81,6 @@ def test_download_routes_precede_web_fallback(tmp_path, monkeypatch) -> None:
     (tmp_path / "index.html").write_text("web fallback", encoding="utf-8")
     client = TestClient(create_app(), follow_redirects=False)
     assert client.get("/download/mac/latest").status_code == 302
+    assert client.get("/download/android/latest").status_code == 302
     for path in ("", "/", "/linux/latest", "/mac/latest.dmg.part"):
         assert client.get(f"/download{path}").status_code == 404

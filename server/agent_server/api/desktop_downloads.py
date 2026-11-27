@@ -8,6 +8,7 @@ from fastapi.responses import RedirectResponse
 _INSTALLERS = {
     "mac": "Agents-Anywhere-latest.dmg",
     "windows": "Agents-Anywhere-Setup-latest.exe",
+    "android": "Agents-Anywhere-latest.apk",
 }
 
 

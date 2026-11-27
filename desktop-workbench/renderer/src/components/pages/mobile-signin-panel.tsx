@@ -352,17 +352,18 @@ function StepIndicator({ current, total, label }: { current: number; total: numb
 
 function DownloadLink() {
   const t = useTranslations("dashboard.mobileConnections")
+  const downloadUrl = PRODUCT_LINKS.downloadPageUrl
   return (
     <div className="flex flex-col items-start gap-3">
-      <Button type="button" variant="outline" size="lg" asChild>
-        <a href={PRODUCT_LINKS.downloadPageUrl} target="_blank" rel="noreferrer">
+      <Button type="button" variant="outline" size="lg" asChild disabled={!downloadUrl}>
+        <a href={downloadUrl || undefined} target="_blank" rel="noreferrer" aria-disabled={!downloadUrl}>
           <Smartphone data-icon="inline-start" />
           {t("openDownloadPage")}
           <ExternalLink data-icon="inline-end" />
         </a>
       </Button>
       <p className="text-xs leading-5 text-muted-foreground">
-        {t("downloadUrlHint", { url: PRODUCT_LINKS.downloadPageUrl })}
+        {t("downloadUrlHint", { url: downloadUrl })}
       </p>
     </div>
   )

@@ -47,11 +47,10 @@ Use JDK 17 and the Android SDK matching `compileSdk` in `app/build.gradle.kts`
 ```
 
 On Windows use `gradlew.bat`. Outputs are under `app/build/outputs/apk/`.
-The checked-in release build type does not define a signing configuration;
-`assembleRelease` alone does not produce a distributable signed update. Apply the
-release signing process with the existing keystore and keep that identity for
-future updates. Do not commit passwords or keystores. Changing the signature
-prevents an in-place update of an installed app signed with another key.
+正式构建通过环境变量 `ANDROID_KEYSTORE_PATH`、`ANDROID_KEYSTORE_PASSWORD`、
+`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD` 注入签名；未配置时本地 Release 仍不签名。
+不要提交密码或密钥，后续更新必须保留相同签名。统一 Tag 发布及配置见
+[自部署自动发布](../docs/self-hosted-deployment.md)。
 
 `local.properties` remains machine-specific and ignored. The manifest allows
 HTTP for local/self-hosted addresses; use HTTPS for public service endpoints.
@@ -91,9 +90,9 @@ numerically. This also runs on launch with an existing login and when the saved
 server changes. Login screens and sessions without a saved server never check
 for updates; no default server is substituted. Signing out cancels pending
 checks and downloads and clears the visible update state.
-`AppConfig.UPDATE_DOWNLOAD_URL` is the fixed APK address,
-`https://www.agents-anywhere.com/api/download/android/latest`, which the official
-site redirects to the latest release APK.
+自部署正式构建由 `CLOUD_SERVER_URL` 注入登录服务地址，更新地址默认为该服务的
+`/download/android/latest?from=update`，可通过 `ANDROID_UPDATE_DOWNLOAD_URL`
+覆盖。未注入自部署配置的开发构建仍保留上游默认入口。
 
 **Ignore this version** saves the target version per server in the private
 `app-updates` SharedPreferences file. The same version stays quiet on later
