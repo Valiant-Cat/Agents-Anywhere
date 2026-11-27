@@ -107,7 +107,7 @@ def build():
     archive = WORK / "AgentsAnywhere.xcarchive"
     run(*args, f"DEVELOPMENT_TEAM={team}", f"PRODUCT_BUNDLE_IDENTIFIER={bundle}",
         "CODE_SIGN_STYLE=Manual", "CODE_SIGN_IDENTITY=Apple Distribution",
-        f"PROVISIONING_PROFILE_SPECIFIER={profile}",
+        f"AA_PROVISIONING_PROFILE_SPECIFIER={profile}",
         f"OTHER_CODE_SIGN_FLAGS=--keychain {KEYCHAIN}",
         "-archivePath", str(archive), "archive")
     options = WORK / "ExportOptions.plist"
