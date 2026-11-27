@@ -52,7 +52,30 @@ jobs:
           PY
       - name: 测试与构建正式 APK
         working-directory: android
-        run: bash gradlew --no-daemon testReleaseUnitTest assembleRelease
+        run: |
+          cat > "$RUNNER_TEMP/robolectric-ci.gradle" <<'GRADLE'
+          allprojects {
+              tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
+                  systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
+                  testLogging {
+                      exceptionFormat = 'full'
+                      showCauses = true
+                      showStackTraces = true
+                  }
+              }
+          }
+          GRADLE
+          bash gradlew --no-daemon --init-script "$RUNNER_TEMP/robolectric-ci.gradle" testReleaseUnitTest assembleRelease
+      - name: 保存失败测试报告
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-reports-${{ github.run_attempt }}
+          path: |
+            android/app/build/test-results/
+            android/app/build/reports/tests/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: 核验签名和安装包版本
         run: |
           tools="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"

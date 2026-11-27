@@ -36,6 +36,18 @@ class ReleaseConfigTest(unittest.TestCase):
         self.assertNotIn("packages: tools", sdk_setup)
         self.assertIn("log-accepted-android-sdk-licenses: false", sdk_setup)
 
+    def test_android_runtime_dependencies_and_failure_reports(self):
+        root = Path(__file__).resolve().parents[1]
+        android = (root / ".github/workflows/android-release.yml").read_text()
+        self.assertIn("tasks.withType(org.gradle.api.tasks.testing.Test)", android)
+        self.assertIn("robolectric.dependency.repo.url", android)
+        self.assertIn("https://repo.maven.apache.org/maven2", android)
+        self.assertIn('--init-script "$RUNNER_TEMP/robolectric-ci.gradle"', android)
+        self.assertIn("exceptionFormat = 'full'", android)
+        self.assertIn("if: failure()", android)
+        self.assertIn("android/app/build/test-results/", android)
+        self.assertIn("android/app/build/reports/tests/", android)
+
     def test_self_hosted_version(self):
         values = release.release_config("v2.2.0.3", "2.2.0.3")
         self.assertEqual(values["RELEASE_PACKAGE_VERSION"], "2.2.10003")
