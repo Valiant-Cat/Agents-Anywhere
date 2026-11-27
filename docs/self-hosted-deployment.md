@@ -55,6 +55,14 @@ git push origin v2.2.0.3
 
 旧的跨提交 Mac 补包分支已移除，避免安装包源码与标签不一致。不要手动把无附件 Release 设置为 Latest。
 
+### 失败平台补跑与产物复用
+
+普通失败优先使用 Actions 的「重新运行失败的作业」，不重建成功的平台。工作流本身修复后，需要从已推送分支手动运行「自部署全平台发布」，填写原 `release_tag`，并分别用 `reuse_mac_run`、`reuse_windows_run`、`reuse_android_run`、`reuse_ios_run` 指定成功平台的运行编号；留空的平台才重新构建。例如只补 Android 时，填写 macOS、Windows、iOS 的来源编号，Android 留空。全部填写时仅汇总发布及部署，不构建客户端。
+
+复用来源必须是本仓库同一发布工作流，包含 `release-context` 追溯记录，标签、产物源码提交、仓库变量、签名配置摘要及对应平台工作流摘要必须一致；对应平台任务必须成功，安装包及 SHA-256 校验文件不能过期。iOS 还必须成功完成测试、签名配置及 TestFlight 上传，复用时不会再次上传。旧运行缺少追溯记录时拒绝复用，不补造记录或绕过校验。变量、签名或公共发布工作流变化会保守地要求重新构建；仅修改 Android 独立工作流不会使其他平台产物失效。
+
+汇总时重新核验所有安装包的 SHA-256，并将各平台来源运行编号记录到 Release 的 `provenance.json`。不能通过复用跨源码提交拼装同一版本，不能移动原 Tag，也不能覆盖已经正式发布的 Release。
+
 ### Android 配置
 
 仓库 Secrets 必须设置 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。必须使用自己长期保管的正式密钥；已分发 APK 的更新必须沿用原密钥，不能为通过构建临时生成替代密钥。Android 工作流运行在 Linux 隔离 Runner，使用 JDK 17，执行 Release 单测、构建、签名核验和包版本核验。

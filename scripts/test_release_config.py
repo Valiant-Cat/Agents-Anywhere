@@ -17,7 +17,7 @@ class ReleaseConfigTest(unittest.TestCase):
         workflow = (root / ".github/workflows/desktop-release.yml").read_text()
         self.assertIn("needs: [validate, build, android, ios]", workflow)
         self.assertIn("needs: [validate, publish]", workflow)
-        self.assertIn("name: android-release", workflow)
+        self.assertIn("scripts/release-reuse.py collect", workflow)
         self.assertNotIn("PACKAGING_COMMIT", workflow)
         android = (root / ".github/workflows/android-release.yml").read_text()
         self.assertIn("apksigner", android)

@@ -9,9 +9,28 @@ on:
         description: 要发布的正式版本标签，例如 v2.2.0.3
         required: true
         type: string
+      reuse_mac_run:
+        description: 复用 macOS 成功产物的运行编号，留空则构建
+        type: string
+      reuse_windows_run:
+        description: 复用 Windows 成功产物的运行编号，留空则构建
+        type: string
+      reuse_android_run:
+        description: 复用 Android 成功产物的运行编号，留空则构建
+        type: string
+      reuse_ios_run:
+        description: 复用已上传 TestFlight 的运行编号，留空则构建上传
+        type: string
 
 permissions:
   contents: read
+  actions: read
+
+env:
+  REUSE_MAC_RUN: ${{ inputs.reuse_mac_run }}
+  REUSE_WINDOWS_RUN: ${{ inputs.reuse_windows_run }}
+  REUSE_ANDROID_RUN: ${{ inputs.reuse_android_run }}
+  REUSE_IOS_RUN: ${{ inputs.reuse_ios_run }}
 
 concurrency:
   group: desktop-release-${{ inputs.release_tag || github.ref_name }}
@@ -24,13 +43,19 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       commit: ${{ steps.version.outputs.commit }}
-      matrix: ${{ steps.version.outputs.matrix }}
+      matrix: ${{ steps.reuse.outputs.matrix }}
+      build_desktop: ${{ steps.reuse.outputs.build_desktop }}
     steps:
       - name: 检出发布源码
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.release_tag || github.ref_name }}
           fetch-depth: 0
+      - name: 检出本次工作流工具
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          path: release-tools
       - name: 校验标签、版本及分支
         id: version
         env:
@@ -80,9 +105,36 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: python3 scripts/release-config.py --check-secrets
+      - name: 记录发布配置并选择构建平台
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VARIABLES: ${{ toJSON(vars) }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          IOS_CERTIFICATE_P12: ${{ secrets.IOS_CERTIFICATE_P12 }}
+          IOS_PROFILE: ${{ secrets.IOS_PROFILE }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WIN_CERT_P12_BASE64: ${{ secrets.WIN_CERT_P12_BASE64 }}
+        run: |
+          python3 -m unittest discover -s release-tools/scripts -p 'test_release_reuse.py'
+          python3 release-tools/scripts/release-reuse.py prepare --tag '${{ steps.version.outputs.tag }}' --commit '${{ steps.version.outputs.commit }}'
+      - name: 保存发布追溯记录
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-context
+          path: release-context/context.json
+          retention-days: 7
+          if-no-files-found: error
 
   android:
     needs: validate
+    if: inputs.reuse_android_run == ''
     uses: ./.github/workflows/android-release.yml
     with:
       commit: ${{ needs.validate.outputs.commit }}
@@ -91,6 +143,7 @@ jobs:
 
   ios:
     needs: validate
+    if: inputs.reuse_ios_run == ''
     uses: ./.github/workflows/ios-testflight.yml
     with:
       commit: ${{ needs.validate.outputs.commit }}
@@ -100,6 +153,7 @@ jobs:
 
   build:
     needs: validate
+    if: needs.validate.outputs.build_desktop == 'true'
     strategy:
       fail-fast: false
       # 按矩阵顺序优先构建 macOS，再构建 Windows。
@@ -213,21 +267,24 @@ jobs:
 
   publish:
     needs: [validate, build, android, ios]
+    if: >-
+      always() && needs.validate.result == 'success' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped') &&
+      (needs.android.result == 'success' || needs.android.result == 'skipped') &&
+      (needs.ios.result == 'success' || needs.ios.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
-      - name: 下载桌面安装包
-        uses: actions/download-artifact@v4
+      - name: 检出发布工具
+        uses: actions/checkout@v6
         with:
-          pattern: desktop-*
-          merge-multiple: true
-          path: assets
-      - name: 下载 Android 安装包
-        uses: actions/download-artifact@v4
-        with:
-          name: android-release
-          path: assets
+          ref: ${{ github.sha }}
+      - name: 核验来源并汇总平台产物
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release-reuse.py collect --tag '${{ needs.validate.outputs.tag }}' --commit '${{ needs.validate.outputs.commit }}'
       - name: 校验并发布正式 Release
         working-directory: assets
         env:
@@ -253,11 +310,12 @@ jobs:
           gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
             Agents-Anywhere-latest.dmg Agents-Anywhere-latest.dmg.sha256 \
             Agents-Anywhere-Setup-latest.exe Agents-Anywhere-Setup-latest.exe.sha256 \
-            Agents-Anywhere-latest.apk Agents-Anywhere-latest.apk.sha256
+            Agents-Anywhere-latest.apk Agents-Anywhere-latest.apk.sha256 provenance.json
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest --notes-file notes.md
 
   deploy:
     needs: [validate, publish]
+    if: always() && needs.validate.result == 'success' && needs.publish.result == 'success'
     uses: ./.github/workflows/deploy-self-hosted.yml
     with:
       release_tag: ${{ needs.validate.outputs.tag }}
