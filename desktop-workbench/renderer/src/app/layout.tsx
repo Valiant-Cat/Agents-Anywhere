@@ -1,4 +1,4 @@
-import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
+import localFont from "next/font/local";
 import type { Metadata, Viewport } from "next";
 import "katex/dist/katex.min.css";
 import "./globals.css";
@@ -6,24 +6,25 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ToasterProvider } from "@/components/toaster-provider";
 import { I18nProvider } from "@/i18n/client-provider";
 
-const sans = Geist({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+const sans = localFont({
+  src: "./fonts/geist.ttf",
+  weight: "100 900",
   display: "swap",
   variable: "--font-geist"
 });
 
-const mono = Geist_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+const mono = localFont({
+  src: "./fonts/geist-mono.ttf",
+  weight: "100 900",
   display: "swap",
   variable: "--font-geist-mono"
 });
 
-const serif = Instrument_Serif({
-  subsets: ["latin"],
-  weight: "400",
-  style: ["normal", "italic"],
+const serif = localFont({
+  src: [
+    { path: "./fonts/instrument-serif.ttf", weight: "400", style: "normal" },
+    { path: "./fonts/instrument-serif-italic.ttf", weight: "400", style: "italic" }
+  ],
   display: "swap",
   variable: "--font-instrument-serif"
 });

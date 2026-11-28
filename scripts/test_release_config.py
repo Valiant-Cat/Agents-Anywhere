@@ -12,6 +12,17 @@ SPEC.loader.exec_module(release)
 
 
 class ReleaseConfigTest(unittest.TestCase):
+    def test_desktop_validation_cannot_publish_or_build_mobile(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github/workflows/desktop-release.yml").read_text()
+        self.assertIn("inputs.desktop_only && github.sha", workflow)
+        self.assertIn("if: inputs.desktop_only != true && inputs.reuse_android_run == ''", workflow)
+        self.assertIn("if: inputs.desktop_only != true && inputs.reuse_ios_run == ''", workflow)
+        self.assertIn("always() && inputs.desktop_only != true && needs.validate.result", workflow)
+        self.assertIn('if [[ "$DESKTOP_ONLY" == "true" ]]; then', workflow)
+        context_step = workflow.split("- name: 保存发布追溯记录", 1)[1].split("\n  android:", 1)[0]
+        self.assertIn("if: inputs.desktop_only != true", context_step)
+
     def test_release_workflow_dependencies(self):
         root = Path(__file__).resolve().parents[1]
         workflow = (root / ".github/workflows/desktop-release.yml").read_text()
